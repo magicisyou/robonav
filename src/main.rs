@@ -2,7 +2,7 @@ use eframe::egui;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 struct Position {
     x: i32,
     y: i32,
@@ -88,13 +88,58 @@ impl PartialOrd for Node {
     }
 }
 
+#[derive(Clone, Debug, Default)]
+struct NeighborInfo {
+    pos: Position,
+    g: Option<i32>,
+    h: Option<i32>,
+    f: Option<i32>,
+    decision: String,
+}
+
 struct PathfindingState {
+    // A* frontier
     open_set: BinaryHeap<Node>,
+    // BFS frontier
+    bfs_queue: VecDeque<Position>,
+    // DFS frontier
+    dfs_stack: Vec<Position>,
+
     closed_set: HashSet<Position>,
     came_from: HashMap<Position, Position>,
+
+    // For visualizing numbers
+    g_costs: HashMap<Position, i32>,
+    h_costs: HashMap<Position, i32>,
+    f_costs: HashMap<Position, i32>,
+
     current_node: Option<Position>,
     found_path: bool,
     step_count: usize,
+
+    // Inspector: details of the last step
+    last_step_info: String,
+    last_neighbors: Vec<NeighborInfo>,
+}
+
+impl Default for PathfindingState {
+    fn default() -> Self {
+        Self {
+            open_set: BinaryHeap::new(),
+            bfs_queue: VecDeque::new(),
+            dfs_stack: Vec::new(),
+            closed_set: HashSet::new(),
+            came_from: HashMap::new(),
+            g_costs: HashMap::new(),
+            h_costs: HashMap::new(),
+            f_costs: HashMap::new(),
+            current_node: None,
+            found_path: false,
+            step_count: 0,
+            last_step_info: String::new(),
+            last_neighbors: Vec::new(),
+        }
+    }
 }
 
 pub struct RobotNavigationApp {
@@ -111,6 +156,8 @@ pub struct RobotNavigationApp {
     final_path: Vec<Position>,
     show_heuristics: bool,
     show_costs: bool,
+    show_parent_arrows: bool,
+    show_visit_order: bool,
     step_by_step: bool,
     auto_solve_speed: f32,
     last_step_time: f64,
@@ -154,6 +201,8 @@ impl Default for RobotNavigationApp {
             final_path: Vec::new(),
             show_heuristics: true,
             show_costs: true,
+            show_parent_arrows: true,
+            show_visit_order: false,
             step_by_step: true,
             auto_solve_speed: 0.5,
             last_step_time: 0.0,
@@ -190,6 +239,19 @@ impl RobotNavigationApp {
             && self.grid[pos.y as usize][pos.x as usize] != CellType::Obstacle
     }
 
+    fn frontier_len(&self) -> usize {
+        if let Some(state) = &self.pathfinding_state {
+            match self.current_algorithm {
+                Algorithm::AStar => state.open_set.len(),
+                Algorithm::BFS => state.bfs_queue.len(),
+                Algorithm::DFS => state.dfs_stack.len(),
+                _ => 0,
+            }
+        } else {
+            0
+        }
+    }
+
     fn start_pathfinding(&mut self) {
         self.clear_visualization();
 
@@ -208,49 +270,34 @@ impl RobotNavigationApp {
                     };
                     open_set.push(start_node);
 
-                    self.pathfinding_state = Some(PathfindingState {
-                        open_set,
-                        closed_set: HashSet::new(),
-                        came_from: HashMap::new(),
-                        current_node: None,
-                        found_path: false,
-                        step_count: 0,
-                    });
+                    let mut state = PathfindingState::default();
+                    state.open_set = open_set;
+                    state.g_costs.insert(start, 0);
+                    state.h_costs
+                        .insert(start, start.manhattan_distance_to(&goal));
+                    state.f_costs.insert(start, start.manhattan_distance_to(&goal));
 
+                    self.pathfinding_state = Some(state);
                     self.is_solving = true;
                     self.algorithm_info = "A* Algorithm: Uses f(n) = g(n) + h(n) where g(n) is the cost from start and h(n) is the heuristic estimate to goal.".to_string();
                 }
                 Algorithm::BFS => {
-                    let mut queue = VecDeque::new();
-                    queue.push_back(start);
-
-                    self.pathfinding_state = Some(PathfindingState {
-                        open_set: BinaryHeap::new(),
-                        closed_set: HashSet::new(),
-                        came_from: HashMap::new(),
-                        current_node: Some(start),
-                        found_path: false,
-                        step_count: 0,
-                    });
-
+                    let mut state = PathfindingState::default();
+                    state.bfs_queue.push_back(start);
+                    state.g_costs.insert(start, 0);
+                    state.h_costs.insert(start, start.manhattan_distance_to(&goal));
+                    self.pathfinding_state = Some(state);
                     self.is_solving = true;
-                    self.algorithm_info = "Breadth-First Search: Explores all nodes at the current depth before moving to nodes at the next depth level. Guarantees shortest path for unweighted graphs.".to_string();
+                    self.algorithm_info = "Breadth-First Search: Explores level by level. Guarantees a shortest path in an unweighted grid.".to_string();
                 }
                 Algorithm::DFS => {
-                    let mut stack = Vec::new();
-                    stack.push(start);
-
-                    self.pathfinding_state = Some(PathfindingState {
-                        open_set: BinaryHeap::new(),
-                        closed_set: HashSet::new(),
-                        came_from: HashMap::new(),
-                        current_node: Some(start),
-                        found_path: false,
-                        step_count: 0,
-                    });
-
+                    let mut state = PathfindingState::default();
+                    state.dfs_stack.push(start);
+                    state.g_costs.insert(start, 0);
+                    state.h_costs.insert(start, start.manhattan_distance_to(&goal));
+                    self.pathfinding_state = Some(state);
                     self.is_solving = true;
-                    self.algorithm_info = "Depth-First Search: Explores as far as possible along each branch before backtracking. Does not guarantee shortest path.".to_string();
+                    self.algorithm_info = "Depth-First Search: Dives deep along a branch before backtracking. Does not guarantee shortest paths.".to_string();
                 }
             }
         }
@@ -272,11 +319,12 @@ impl RobotNavigationApp {
     }
 
     fn step_astar(&mut self, goal: Position) -> bool {
-        // First, check if we can continue and get current node
-        let (current_node, should_continue) = {
+        // pop current
+        let current_node = {
             let state = self.pathfinding_state.as_mut().unwrap();
 
             if state.open_set.is_empty() {
+                state.last_step_info = "Open set empty → no path".to_string();
                 self.is_solving = false;
                 return false;
             }
@@ -285,19 +333,33 @@ impl RobotNavigationApp {
             state.closed_set.insert(current.position);
             state.current_node = Some(current.position);
             state.step_count += 1;
-
-            (current, true)
+            current
         };
 
-        if !should_continue {
-            return false;
-        }
-
-        // Update grid
+        // Update grid highlighting
         self.grid[current_node.position.y as usize][current_node.position.x as usize] =
             CellType::Current;
 
-        // Check if we reached the goal
+        // Inspector text
+        if let Some(state) = &mut self.pathfinding_state {
+            let g = current_node.g_cost;
+            let h = current_node.h_cost;
+            let f = g + h;
+            state.last_step_info = format!(
+                "Step {}: pop ({}, {}) with g={}, h={}, f={} ({} open, {} closed)",
+                state.step_count,
+                current_node.position.x,
+                current_node.position.y,
+                g,
+                h,
+                f,
+                state.open_set.len(),
+                state.closed_set.len()
+            );
+            state.last_neighbors.clear();
+        }
+
+        // Goal check
         if current_node.position == goal {
             let path_data = {
                 let state = self.pathfinding_state.as_ref().unwrap();
@@ -319,6 +381,7 @@ impl RobotNavigationApp {
             .filter(|pos| self.is_valid_position(pos))
             .collect();
 
+        // Filter unvisited
         let neighbors_to_process = {
             let state = self.pathfinding_state.as_ref().unwrap();
             valid_neighbors
@@ -327,60 +390,82 @@ impl RobotNavigationApp {
                 .collect::<Vec<_>>()
         };
 
-        let neighbors_to_add: Vec<(Position, Node)> = {
+        let mut neighbors_to_add: Vec<(Position, Node)> = Vec::new();
+        let open_snapshot;
+        {
             let state = self.pathfinding_state.as_ref().unwrap();
-            let mut result = Vec::new();
+            open_snapshot = state.open_set.clone().into_vec();
+        }
 
-            for neighbor_pos in neighbors_to_process {
-                let tentative_g = current_node.g_cost + 1;
-                let h_cost = neighbor_pos.manhattan_distance_to(&goal);
+        for neighbor_pos in neighbors_to_process {
+            let tentative_g = current_node.g_cost + 1;
+            let h_cost = neighbor_pos.manhattan_distance_to(&goal);
+            let mut decision = "push".to_string();
 
-                // Check if this path to neighbor is better
-                let mut should_add = true;
-                let open_set_vec: Vec<_> = state.open_set.clone().into_vec();
-                for existing in &open_set_vec {
-                    if existing.position == neighbor_pos && existing.g_cost <= tentative_g {
-                        should_add = false;
-                        break;
-                    }
-                }
-
-                if should_add {
-                    let neighbor_node = Node {
-                        position: neighbor_pos,
-                        g_cost: tentative_g,
-                        h_cost,
-                        parent: Some(current_node.position),
-                    };
-                    result.push((neighbor_pos, neighbor_node));
+            // Check if a better path already exists in open set
+            let mut should_add = true;
+            for existing in &open_snapshot {
+                if existing.position == neighbor_pos && existing.g_cost <= tentative_g {
+                    should_add = false;
+                    decision = format!(
+                        "skip: existing g={} ≤ tentative g={}",
+                        existing.g_cost, tentative_g
+                    );
+                    break;
                 }
             }
-            result
-        };
 
-        // Add neighbors to open set and update grid
+            if should_add {
+                let neighbor_node = Node {
+                    position: neighbor_pos,
+                    g_cost: tentative_g,
+                    h_cost,
+                    parent: Some(current_node.position),
+                };
+                neighbors_to_add.push((neighbor_pos, neighbor_node));
+                decision = format!(
+                    "push: g={}, h={}, f={}",
+                    tentative_g,
+                    h_cost,
+                    tentative_g + h_cost
+                );
+            }
+
+            if let Some(state) = &mut self.pathfinding_state {
+                state.last_neighbors.push(NeighborInfo {
+                    pos: neighbor_pos,
+                    g: Some(tentative_g),
+                    h: Some(h_cost),
+                    f: Some(tentative_g + h_cost),
+                    decision,
+                });
+            }
+        }
+
+        // Add neighbors to open set and update visuals
         {
             let state = self.pathfinding_state.as_mut().unwrap();
             for (neighbor_pos, neighbor_node) in neighbors_to_add {
                 state.came_from.insert(neighbor_pos, current_node.position);
+                state.g_costs.insert(neighbor_pos, neighbor_node.g_cost);
+                state.h_costs.insert(neighbor_pos, neighbor_node.h_cost);
+                state.f_costs
+                    .insert(neighbor_pos, neighbor_node.g_cost + neighbor_node.h_cost);
                 state.open_set.push(neighbor_node);
                 if self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] == CellType::Empty {
-                    self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] =
-                        CellType::Frontier;
+                    self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] = CellType::Frontier;
                 }
             }
         }
 
-        // Update visited cells
+        // Update visited cells (excluding start/goal)
         let visited_positions: Vec<Position> = {
             let state = self.pathfinding_state.as_ref().unwrap();
             state.closed_set.iter().copied().collect()
         };
 
         for pos in &visited_positions {
-            if self.grid[pos.y as usize][pos.x as usize] != CellType::Start
-                && self.grid[pos.y as usize][pos.x as usize] != CellType::Goal
-            {
+            if Some(*pos) != self.start_pos && Some(*pos) != self.goal_pos {
                 self.grid[pos.y as usize][pos.x as usize] = CellType::Visited;
             }
         }
@@ -388,17 +473,223 @@ impl RobotNavigationApp {
         false
     }
 
-    fn step_bfs(&mut self, _goal: Position) -> bool {
-        // BFS implementation would go here
-        // For brevity, I'll implement a simplified version
-        self.is_solving = false;
+    fn step_bfs(&mut self, goal: Position) -> bool {
+        // pop current
+        let current = {
+            let state = self.pathfinding_state.as_mut().unwrap();
+            if state.bfs_queue.is_empty() {
+                state.last_step_info = "Queue empty → no path".to_string();
+                self.is_solving = false;
+                return false;
+            }
+            let c = state.bfs_queue.pop_front().unwrap();
+            state.current_node = Some(c);
+            state.closed_set.insert(c);
+            state.step_count += 1;
+            c
+        };
+
+        self.grid[current.y as usize][current.x as usize] = CellType::Current;
+
+        if let Some(state) = &mut self.pathfinding_state {
+            let g = *state.g_costs.get(&current).unwrap_or(&0);
+            let h = self.goal_pos.map(|gpos| current.manhattan_distance_to(&gpos));
+            state.last_step_info = format!(
+                "Step {}: pop ({}, {}) at distance g={} (queue={}, closed={})",
+                state.step_count,
+                current.x,
+                current.y,
+                g,
+                state.bfs_queue.len(),
+                state.closed_set.len()
+            );
+            if let Some(hv) = h {
+                state.h_costs.insert(current, hv);
+            }
+            state.last_neighbors.clear();
+        }
+
+        if current == goal {
+            let path_data = {
+                let state = self.pathfinding_state.as_ref().unwrap();
+                state.came_from.clone()
+            };
+            self.reconstruct_path_with_data(current, path_data);
+            let state = self.pathfinding_state.as_mut().unwrap();
+            state.found_path = true;
+            self.is_solving = false;
+            return true;
+        }
+
+        // expand neighbors once (BFS discovers each node once)
+        let neighbors: Vec<Position> = current
+            .neighbors()
+            .into_iter()
+            .filter(|p| self.is_valid_position(p))
+            .collect();
+
+        let (came_from_snapshot, closed_snapshot) = {
+            let s = self.pathfinding_state.as_ref().unwrap();
+            (s.came_from.clone(), s.closed_set.clone())
+        };
+
+        for nb in neighbors {
+            if closed_snapshot.contains(&nb) || came_from_snapshot.contains_key(&nb) {
+                if let Some(state) = &mut self.pathfinding_state {
+                    state.last_neighbors.push(NeighborInfo {
+                        pos: nb,
+                        g: None,
+                        h: Some(nb.manhattan_distance_to(&goal)),
+                        f: None,
+                        decision: "skip: already seen".to_string(),
+                    });
+                }
+                continue;
+            }
+
+            // discover nb
+            let new_g = {
+                let s = self.pathfinding_state.as_ref().unwrap();
+                *s.g_costs.get(&current).unwrap_or(&0) + 1
+            };
+            {
+                let s = self.pathfinding_state.as_mut().unwrap();
+                s.came_from.insert(nb, current);
+                s.g_costs.insert(nb, new_g);
+                s.h_costs.insert(nb, nb.manhattan_distance_to(&goal));
+                s.bfs_queue.push_back(nb);
+                if self.grid[nb.y as usize][nb.x as usize] == CellType::Empty {
+                    self.grid[nb.y as usize][nb.x as usize] = CellType::Frontier;
+                }
+                s.last_neighbors.push(NeighborInfo {
+                    pos: nb,
+                    g: Some(new_g),
+                    h: Some(nb.manhattan_distance_to(&goal)),
+                    f: None,
+                    decision: "enqueue".to_string(),
+                });
+            }
+        }
+
+        // paint visited
+        if let Some(state) = &self.pathfinding_state {
+            for pos in &state.closed_set {
+                if Some(*pos) != self.start_pos && Some(*pos) != self.goal_pos {
+                    self.grid[pos.y as usize][pos.x as usize] = CellType::Visited;
+                }
+            }
+        }
+
         false
     }
 
-    fn step_dfs(&mut self, _goal: Position) -> bool {
-        // DFS implementation would go here
-        // For brevity, I'll implement a simplified version
-        self.is_solving = false;
+    fn step_dfs(&mut self, goal: Position) -> bool {
+        // pop current
+        let current = {
+            let state = self.pathfinding_state.as_mut().unwrap();
+            if state.dfs_stack.is_empty() {
+                state.last_step_info = "Stack empty → no path".to_string();
+                self.is_solving = false;
+                return false;
+            }
+            let c = state.dfs_stack.pop().unwrap();
+            state.current_node = Some(c);
+            state.closed_set.insert(c);
+            state.step_count += 1;
+            c
+        };
+
+        self.grid[current.y as usize][current.x as usize] = CellType::Current;
+
+        if let Some(state) = &mut self.pathfinding_state {
+            let g = *state.g_costs.get(&current).unwrap_or(&0);
+            state.last_step_info = format!(
+                "Step {}: pop ({}, {}) depth g={} (stack={}, closed={})",
+                state.step_count,
+                current.x,
+                current.y,
+                g,
+                state.dfs_stack.len(),
+                state.closed_set.len()
+            );
+            state.h_costs
+                .insert(current, current.manhattan_distance_to(&goal));
+            state.last_neighbors.clear();
+        }
+
+        if current == goal {
+            let path_data = {
+                let state = self.pathfinding_state.as_ref().unwrap();
+                state.came_from.clone()
+            };
+            self.reconstruct_path_with_data(current, path_data);
+            let state = self.pathfinding_state.as_mut().unwrap();
+            state.found_path = true;
+            self.is_solving = false;
+            return true;
+        }
+
+        // expand neighbors (push in reverse order to get a classic N,E,S,W feel if desired)
+        let mut neighbors: Vec<Position> = current
+            .neighbors()
+            .into_iter()
+            .filter(|p| self.is_valid_position(p))
+            .collect();
+        // Optional: reverse for a consistent exploration pattern
+        neighbors.reverse();
+
+        let (came_from_snapshot, closed_snapshot) = {
+            let s = self.pathfinding_state.as_ref().unwrap();
+            (s.came_from.clone(), s.closed_set.clone())
+        };
+
+        for nb in neighbors {
+            if closed_snapshot.contains(&nb) || came_from_snapshot.contains_key(&nb) {
+                if let Some(state) = &mut self.pathfinding_state {
+                    state.last_neighbors.push(NeighborInfo {
+                        pos: nb,
+                        g: None,
+                        h: Some(nb.manhattan_distance_to(&goal)),
+                        f: None,
+                        decision: "skip: already seen".to_string(),
+                    });
+                }
+                continue;
+            }
+
+            let new_g = {
+                let s = self.pathfinding_state.as_ref().unwrap();
+                *s.g_costs.get(&current).unwrap_or(&0) + 1
+            };
+
+            {
+                let s = self.pathfinding_state.as_mut().unwrap();
+                s.came_from.insert(nb, current);
+                s.g_costs.insert(nb, new_g);
+                s.h_costs.insert(nb, nb.manhattan_distance_to(&goal));
+                s.dfs_stack.push(nb);
+                if self.grid[nb.y as usize][nb.x as usize] == CellType::Empty {
+                    self.grid[nb.y as usize][nb.x as usize] = CellType::Frontier;
+                }
+                s.last_neighbors.push(NeighborInfo {
+                    pos: nb,
+                    g: Some(new_g),
+                    h: Some(nb.manhattan_distance_to(&goal)),
+                    f: None,
+                    decision: "push".to_string(),
+                });
+            }
+        }
+
+        // paint visited
+        if let Some(state) = &self.pathfinding_state {
+            for pos in &state.closed_set {
+                if Some(*pos) != self.start_pos && Some(*pos) != self.goal_pos {
+                    self.grid[pos.y as usize][pos.x as usize] = CellType::Visited;
+                }
+            }
+        }
+
         false
     }
 
@@ -455,7 +746,9 @@ impl RobotNavigationApp {
         match self.selected_tool {
             Tool::SetStart => {
                 if let Some(old_start) = self.start_pos {
-                    self.grid[old_start.y as usize][old_start.x as usize] = CellType::Empty;
+                    if self.grid[old_start.y as usize][old_start.x as usize] != CellType::Goal {
+                        self.grid[old_start.y as usize][old_start.x as usize] = CellType::Empty;
+                    }
                 }
                 self.start_pos = Some(pos);
                 self.robot_pos = Some(pos);
@@ -463,7 +756,9 @@ impl RobotNavigationApp {
             }
             Tool::SetGoal => {
                 if let Some(old_goal) = self.goal_pos {
-                    self.grid[old_goal.y as usize][old_goal.x as usize] = CellType::Empty;
+                    if self.grid[old_goal.y as usize][old_goal.x as usize] != CellType::Start {
+                        self.grid[old_goal.y as usize][old_goal.x as usize] = CellType::Empty;
+                    }
                 }
                 self.goal_pos = Some(pos);
                 self.grid[pos.y as usize][pos.x as usize] = CellType::Goal;
@@ -507,7 +802,7 @@ impl eframe::App for RobotNavigationApp {
             ctx.request_repaint();
         }
 
-        egui::CentralPanel::default().show(ctx, |ui| {
+        egui::TopBottomPanel::top("top_controls").show(ctx, |ui| {
             ui.heading("Robot Navigation System");
 
             // Algorithm selection and controls
@@ -516,11 +811,7 @@ impl eframe::App for RobotNavigationApp {
                 egui::ComboBox::from_label("")
                     .selected_text(format!("{:?}", self.current_algorithm))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(
-                            &mut self.current_algorithm,
-                            Algorithm::Manual,
-                            "Manual",
-                        );
+                        ui.selectable_value(&mut self.current_algorithm, Algorithm::Manual, "Manual");
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::BFS, "BFS");
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::DFS, "DFS");
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::AStar, "A*");
@@ -547,74 +838,76 @@ impl eframe::App for RobotNavigationApp {
                 ui.selectable_value(&mut self.selected_tool, Tool::SetStart, "Set Start");
                 ui.selectable_value(&mut self.selected_tool, Tool::SetGoal, "Set Goal");
                 ui.selectable_value(&mut self.selected_tool, Tool::AddObstacle, "Add Obstacle");
-                ui.selectable_value(
-                    &mut self.selected_tool,
-                    Tool::RemoveObstacle,
-                    "Remove Obstacle",
-                );
+                ui.selectable_value(&mut self.selected_tool, Tool::RemoveObstacle, "Remove Obstacle");
             });
 
             // Options
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.show_heuristics, "Show Heuristics");
-                ui.checkbox(&mut self.show_costs, "Show Costs");
+                ui.checkbox(&mut self.show_heuristics, "Show Heuristics (h)");
+                ui.checkbox(&mut self.show_costs, "Show Costs (g/f)");
+                ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
+                ui.checkbox(&mut self.show_visit_order, "Show Visit Order");
                 ui.checkbox(&mut self.step_by_step, "Step by Step");
                 if !self.step_by_step {
                     ui.add(egui::Slider::new(&mut self.auto_solve_speed, 0.1..=2.0).text("Speed"));
                 }
             });
 
-            // Manual controls
-            if self.current_algorithm == Algorithm::Manual {
-                ui.horizontal(|ui| {
-                    ui.label("Manual Control:");
-                    if ui.button("↑").clicked() {
-                        self.move_robot_manually((0, -1));
-                    }
-                    if ui.button("↓").clicked() {
-                        self.move_robot_manually((0, 1));
-                    }
-                    if ui.button("←").clicked() {
-                        self.move_robot_manually((-1, 0));
-                    }
-                    if ui.button("→").clicked() {
-                        self.move_robot_manually((1, 0));
-                    }
-                });
-            }
-
-            // Algorithm info
-            if !self.algorithm_info.is_empty() {
-                ui.separator();
-                ui.label(&self.algorithm_info);
-            }
-
-            // Statistics
+            // Statistics + step inspector
             if let Some(state) = &self.pathfinding_state {
+                ui.separator();
                 ui.horizontal(|ui| {
                     ui.label(format!("Steps: {}", state.step_count));
-                    ui.label(format!("Open Set: {}", state.open_set.len()));
-                    ui.label(format!("Closed Set: {}", state.closed_set.len()));
+                    ui.label(format!("Frontier: {}", self.frontier_len()));
+                    ui.label(format!("Visited: {}", state.closed_set.len()));
                     if !self.final_path.is_empty() {
                         ui.label(format!("Path Length: {}", self.final_path.len()));
                     }
                 });
+                egui::CollapsingHeader::new("Step Inspector").default_open(true).show(ui, |ui| {
+                    ui.monospace(&state.last_step_info);
+                    if !state.last_neighbors.is_empty() {
+                        ui.separator();
+                        ui.monospace("Neighbors:");
+                        for n in &state.last_neighbors {
+                            let g = n.g.map(|v| format!("g={}", v)).unwrap_or_else(|| "".to_string());
+                            let h = n.h.map(|v| format!(" h={}", v)).unwrap_or_else(|| "".to_string());
+                            let f = n.f.map(|v| format!(" f={}", v)).unwrap_or_else(|| "".to_string());
+                            ui.monospace(format!(
+                                "  ({} , {}) {}{}{} → {}",
+                                n.pos.x, n.pos.y, g, h, f, n.decision
+                            ));
+                        }
+                    }
+                });
             }
+        });
 
-            // Grid
-            ui.separator();
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Grid drawing
             let cell_size = 25.0;
             let (response, painter) = ui.allocate_painter(
-                egui::Vec2::new(
-                    self.grid_width as f32 * cell_size,
-                    self.grid_height as f32 * cell_size,
-                ),
+                egui::Vec2::new(self.grid_width as f32 * cell_size, self.grid_height as f32 * cell_size),
                 egui::Sense::click(),
             );
 
             let rect = response.rect;
+            let pointer_pos = response.interact_pointer_pos();
 
-            // Draw grid
+            // Optional: draw parent arrows
+            if self.show_parent_arrows {
+                if let Some(state) = &self.pathfinding_state {
+                    for (child, parent) in &state.came_from {
+                        let from = rect.min
+                            + egui::Vec2::new(child.x as f32 * cell_size + cell_size * 0.5, child.y as f32 * cell_size + cell_size * 0.5);
+                        let to = rect.min
+                            + egui::Vec2::new(parent.x as f32 * cell_size + cell_size * 0.5, parent.y as f32 * cell_size + cell_size * 0.5);
+                        painter.line_segment([from, to], egui::Stroke::new(1.0, egui::Color32::DARK_GRAY));
+                    }
+                }
+            }
+
+            // Draw grid cells
             for y in 0..self.grid_height {
                 for x in 0..self.grid_width {
                     let cell_rect = egui::Rect::from_min_size(
@@ -649,20 +942,72 @@ impl eframe::App for RobotNavigationApp {
                         );
                     }
 
-                    // Draw heuristics and costs for A*
-                    if self.current_algorithm == Algorithm::AStar
-                        && (self.show_heuristics || self.show_costs)
-                    {
-                        if let Some(goal) = self.goal_pos {
-                            let h_cost = pos.manhattan_distance_to(&goal);
+                    // Show numbers (h/g/f)
+                    if self.show_heuristics || self.show_costs {
+                        if let Some(state) = &self.pathfinding_state {
+                            let mut text = String::new();
+                            if self.show_costs {
+                                if let Some(g) = state.g_costs.get(&pos) {
+                                    text.push_str(&format!("g:{} ", g));
+                                }
+                                if let Some(f) = state.f_costs.get(&pos) {
+                                    text.push_str(&format!("f:{} ", f));
+                                }
+                            }
                             if self.show_heuristics {
+                                if let Some(h) = state.h_costs.get(&pos) {
+                                    text.push_str(&format!("h:{}", h));
+                                }
+                            }
+                            if !text.is_empty() {
                                 painter.text(
                                     cell_rect.min + egui::Vec2::new(2.0, 2.0),
                                     egui::Align2::LEFT_TOP,
-                                    format!("h:{}", h_cost),
-                                    egui::FontId::proportional(8.0),
+                                    text,
+                                    egui::FontId::proportional(8.5),
                                     egui::Color32::BLACK,
                                 );
+                            }
+
+                            // Visit order
+                            if self.show_visit_order && state.closed_set.contains(&pos) {
+                                painter.text(
+                                    cell_rect.center_top() + egui::vec2(0.0, 2.0),
+                                    egui::Align2::CENTER_TOP,
+                                    format!("t{}", state.step_count),
+                                    egui::FontId::proportional(8.0),
+                                    egui::Color32::DARK_GRAY,
+                                );
+                            }
+                        }
+                    }
+
+                    // Tooltips with rich info
+                    if let Some(pp) = pointer_pos {
+                        if cell_rect.contains(pp) {
+                            if let Some(state) = &self.pathfinding_state {
+                                let mut lines: Vec<String> = Vec::new();
+                                if Some(pos) == self.start_pos {
+                                    lines.push("Start".into());
+                                }
+                                if Some(pos) == self.goal_pos {
+                                    lines.push("Goal".into());
+                                }
+                                if let Some(g) = state.g_costs.get(&pos) {
+                                    lines.push(format!("g = {}", g));
+                                }
+                                if let Some(h) = state.h_costs.get(&pos) {
+                                    lines.push(format!("h = {}", h));
+                                }
+                                if let Some(f) = state.f_costs.get(&pos) {
+                                    lines.push(format!("f = {}", f));
+                                }
+                                if let Some(parent) = state.came_from.get(&pos) {
+                                    lines.push(format!("parent = ({}, {})", parent.x, parent.y));
+                                }
+                                if !lines.is_empty() {
+
+                                }
                             }
                         }
                     }
@@ -697,7 +1042,7 @@ impl eframe::App for RobotNavigationApp {
 
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 800.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([1000.0, 820.0]),
         ..Default::default()
     };
 
@@ -707,3 +1052,4 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|_cc| Ok(Box::new(RobotNavigationApp::default()))),
     )
 }
+
