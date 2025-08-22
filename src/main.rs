@@ -2,6 +2,9 @@ use eframe::egui;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
 
+const GRID_WIDTH: usize = 10;
+const GRID_HEIGHT: usize = 10;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 struct Position {
     x: i32,
@@ -273,9 +276,12 @@ impl RobotNavigationApp {
                     let mut state = PathfindingState::default();
                     state.open_set = open_set;
                     state.g_costs.insert(start, 0);
-                    state.h_costs
+                    state
+                        .h_costs
                         .insert(start, start.manhattan_distance_to(&goal));
-                    state.f_costs.insert(start, start.manhattan_distance_to(&goal));
+                    state
+                        .f_costs
+                        .insert(start, start.manhattan_distance_to(&goal));
 
                     self.pathfinding_state = Some(state);
                     self.is_solving = true;
@@ -285,7 +291,9 @@ impl RobotNavigationApp {
                     let mut state = PathfindingState::default();
                     state.bfs_queue.push_back(start);
                     state.g_costs.insert(start, 0);
-                    state.h_costs.insert(start, start.manhattan_distance_to(&goal));
+                    state
+                        .h_costs
+                        .insert(start, start.manhattan_distance_to(&goal));
                     self.pathfinding_state = Some(state);
                     self.is_solving = true;
                     self.algorithm_info = "Breadth-First Search: Explores level by level. Guarantees a shortest path in an unweighted grid.".to_string();
@@ -294,7 +302,9 @@ impl RobotNavigationApp {
                     let mut state = PathfindingState::default();
                     state.dfs_stack.push(start);
                     state.g_costs.insert(start, 0);
-                    state.h_costs.insert(start, start.manhattan_distance_to(&goal));
+                    state
+                        .h_costs
+                        .insert(start, start.manhattan_distance_to(&goal));
                     self.pathfinding_state = Some(state);
                     self.is_solving = true;
                     self.algorithm_info = "Depth-First Search: Dives deep along a branch before backtracking. Does not guarantee shortest paths.".to_string();
@@ -449,11 +459,13 @@ impl RobotNavigationApp {
                 state.came_from.insert(neighbor_pos, current_node.position);
                 state.g_costs.insert(neighbor_pos, neighbor_node.g_cost);
                 state.h_costs.insert(neighbor_pos, neighbor_node.h_cost);
-                state.f_costs
+                state
+                    .f_costs
                     .insert(neighbor_pos, neighbor_node.g_cost + neighbor_node.h_cost);
                 state.open_set.push(neighbor_node);
                 if self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] == CellType::Empty {
-                    self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] = CellType::Frontier;
+                    self.grid[neighbor_pos.y as usize][neighbor_pos.x as usize] =
+                        CellType::Frontier;
                 }
             }
         }
@@ -493,7 +505,9 @@ impl RobotNavigationApp {
 
         if let Some(state) = &mut self.pathfinding_state {
             let g = *state.g_costs.get(&current).unwrap_or(&0);
-            let h = self.goal_pos.map(|gpos| current.manhattan_distance_to(&gpos));
+            let h = self
+                .goal_pos
+                .map(|gpos| current.manhattan_distance_to(&gpos));
             state.last_step_info = format!(
                 "Step {}: pop ({}, {}) at distance g={} (queue={}, closed={})",
                 state.step_count,
@@ -612,7 +626,8 @@ impl RobotNavigationApp {
                 state.dfs_stack.len(),
                 state.closed_set.len()
             );
-            state.h_costs
+            state
+                .h_costs
                 .insert(current, current.manhattan_distance_to(&goal));
             state.last_neighbors.clear();
         }
@@ -811,7 +826,11 @@ impl eframe::App for RobotNavigationApp {
                 egui::ComboBox::from_label("")
                     .selected_text(format!("{:?}", self.current_algorithm))
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.current_algorithm, Algorithm::Manual, "Manual");
+                        ui.selectable_value(
+                            &mut self.current_algorithm,
+                            Algorithm::Manual,
+                            "Manual",
+                        );
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::BFS, "BFS");
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::DFS, "DFS");
                         ui.selectable_value(&mut self.current_algorithm, Algorithm::AStar, "A*");
@@ -838,7 +857,11 @@ impl eframe::App for RobotNavigationApp {
                 ui.selectable_value(&mut self.selected_tool, Tool::SetStart, "Set Start");
                 ui.selectable_value(&mut self.selected_tool, Tool::SetGoal, "Set Goal");
                 ui.selectable_value(&mut self.selected_tool, Tool::AddObstacle, "Add Obstacle");
-                ui.selectable_value(&mut self.selected_tool, Tool::RemoveObstacle, "Remove Obstacle");
+                ui.selectable_value(
+                    &mut self.selected_tool,
+                    Tool::RemoveObstacle,
+                    "Remove Obstacle",
+                );
             });
 
             // Options
@@ -864,30 +887,41 @@ impl eframe::App for RobotNavigationApp {
                         ui.label(format!("Path Length: {}", self.final_path.len()));
                     }
                 });
-                egui::CollapsingHeader::new("Step Inspector").default_open(true).show(ui, |ui| {
-                    ui.monospace(&state.last_step_info);
-                    if !state.last_neighbors.is_empty() {
-                        ui.separator();
-                        ui.monospace("Neighbors:");
-                        for n in &state.last_neighbors {
-                            let g = n.g.map(|v| format!("g={}", v)).unwrap_or_else(|| "".to_string());
-                            let h = n.h.map(|v| format!(" h={}", v)).unwrap_or_else(|| "".to_string());
-                            let f = n.f.map(|v| format!(" f={}", v)).unwrap_or_else(|| "".to_string());
-                            ui.monospace(format!(
-                                "  ({} , {}) {}{}{} → {}",
-                                n.pos.x, n.pos.y, g, h, f, n.decision
-                            ));
+                egui::CollapsingHeader::new("Step Inspector")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        ui.monospace(&state.last_step_info);
+                        if !state.last_neighbors.is_empty() {
+                            ui.separator();
+                            ui.monospace("Neighbors:");
+                            for n in &state.last_neighbors {
+                                let g =
+                                    n.g.map(|v| format!("g={}", v))
+                                        .unwrap_or_else(|| "".to_string());
+                                let h =
+                                    n.h.map(|v| format!(" h={}", v))
+                                        .unwrap_or_else(|| "".to_string());
+                                let f =
+                                    n.f.map(|v| format!(" f={}", v))
+                                        .unwrap_or_else(|| "".to_string());
+                                ui.monospace(format!(
+                                    "  ({} , {}) {}{}{} → {}",
+                                    n.pos.x, n.pos.y, g, h, f, n.decision
+                                ));
+                            }
                         }
-                    }
-                });
+                    });
             }
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             // Grid drawing
-            let cell_size = 25.0;
+            let cell_size = 50.0;
             let (response, painter) = ui.allocate_painter(
-                egui::Vec2::new(self.grid_width as f32 * cell_size, self.grid_height as f32 * cell_size),
+                egui::Vec2::new(
+                    self.grid_width as f32 * cell_size,
+                    self.grid_height as f32 * cell_size,
+                ),
                 egui::Sense::click(),
             );
 
@@ -899,10 +933,19 @@ impl eframe::App for RobotNavigationApp {
                 if let Some(state) = &self.pathfinding_state {
                     for (child, parent) in &state.came_from {
                         let from = rect.min
-                            + egui::Vec2::new(child.x as f32 * cell_size + cell_size * 0.5, child.y as f32 * cell_size + cell_size * 0.5);
+                            + egui::Vec2::new(
+                                child.x as f32 * cell_size + cell_size * 0.5,
+                                child.y as f32 * cell_size + cell_size * 0.5,
+                            );
                         let to = rect.min
-                            + egui::Vec2::new(parent.x as f32 * cell_size + cell_size * 0.5, parent.y as f32 * cell_size + cell_size * 0.5);
-                        painter.line_segment([from, to], egui::Stroke::new(1.0, egui::Color32::DARK_GRAY));
+                            + egui::Vec2::new(
+                                parent.x as f32 * cell_size + cell_size * 0.5,
+                                parent.y as f32 * cell_size + cell_size * 0.5,
+                            );
+                        painter.line_segment(
+                            [from, to],
+                            egui::Stroke::new(1.0, egui::Color32::DARK_GRAY),
+                        );
                     }
                 }
             }
@@ -1005,9 +1048,7 @@ impl eframe::App for RobotNavigationApp {
                                 if let Some(parent) = state.came_from.get(&pos) {
                                     lines.push(format!("parent = ({}, {})", parent.x, parent.y));
                                 }
-                                if !lines.is_empty() {
-
-                                }
+                                if !lines.is_empty() {}
                             }
                         }
                     }
@@ -1052,4 +1093,3 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|_cc| Ok(Box::new(RobotNavigationApp::default()))),
     )
 }
-
