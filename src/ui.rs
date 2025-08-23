@@ -1,237 +1,28 @@
+use crate::{CELL_SIZE, RoboNav, algorithms::Algorithm, position::Position, tools::Tool};
 use eframe::egui;
 
-mod algorithms;
-mod grid;
-mod node;
-mod pathfinding_state;
-mod position;
-mod theme;
-mod tools;
-
-use algorithms::Algorithm;
-use grid::{CellType, Grid};
-use pathfinding_state::PathfindingState;
-use position::Position;
-use theme::Theme;
-use tools::Tool;
-
-const CELL_SIZE: f32 = 50.0;
-
-pub struct RoboNav {
-    grid: Grid,
-    start_pos: Option<Position>,
-    goal_pos: Option<Position>,
-    robot_pos: Option<Position>,
-    current_algorithm: Algorithm,
-    is_solving: bool,
-    solving_step: usize,
-    pathfinding_state: Option<PathfindingState>,
-    final_path: Vec<Position>,
-
-    // UI Settings
-    show_heuristics: bool,
-    show_costs: bool,
-    show_parent_arrows: bool,
-    show_visit_order: bool,
-    step_by_step: bool,
-    auto_solve_speed: f32,
-    last_step_time: f64,
-    selected_tool: Tool,
-    algorithm_info: String,
-
-    // UI Components - simplified to avoid borrow issues
-    ui: UIState,
-    theme: Theme,
+pub struct UI {
+    show_inspector: bool,
+    show_statistics: bool,
+    show_settings: bool,
 }
 
-// Simple UI state struct to avoid borrowing conflicts
-pub struct UIState {
-    pub show_inspector: bool,
-    pub show_statistics: bool,
-    pub show_settings: bool,
-}
-
-impl Default for UIState {
-    fn default() -> Self {
+impl UI {
+    pub fn new() -> Self {
         Self {
             show_inspector: true,
             show_statistics: true,
             show_settings: false,
         }
     }
-}
 
-impl Default for RoboNav {
-    fn default() -> Self {
-        let width = 20;
-        let height = 13;
-        let mut grid = Grid::new(width, height);
-
-        // Add some default obstacles
-        for i in 5..15 {
-            grid.set_cell(Position::new(i, 7), CellType::Obstacle);
-        }
-        for i in 2..8 {
-            grid.set_cell(Position::new(12, i), CellType::Obstacle);
-        }
-
-        Self {
-            grid,
-            start_pos: Some(Position::new(2, 2)),
-            goal_pos: Some(Position::new(17, 12)),
-            robot_pos: Some(Position::new(2, 2)),
-            current_algorithm: Algorithm::AStar,
-            is_solving: false,
-            solving_step: 0,
-            pathfinding_state: None,
-            final_path: Vec::new(),
-
-            show_heuristics: true,
-            show_costs: true,
-            show_parent_arrows: true,
-            show_visit_order: false,
-            step_by_step: true,
-            auto_solve_speed: 0.5,
-            last_step_time: 0.0,
-            selected_tool: Tool::SetStart,
-            algorithm_info: String::new(),
-
-            ui: UIState::default(),
-            theme: Theme::default(),
-        }
-    }
-}
-
-impl RoboNav {
-    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Configure fonts and style
-        cc.egui_ctx.set_visuals(egui::Visuals::dark());
-
-        Self::default()
+    pub fn render(&mut self, ctx: &egui::Context, app: &mut RoboNav) {
+        self.render_header(ctx, app);
+        self.render_main_content(ctx, app);
+        self.render_side_panel(ctx, app);
     }
 
-    fn clear_visualization(&mut self) {
-        self.grid.clear_pathfinding_cells();
-        self.is_solving = false;
-        self.solving_step = 0;
-        self.pathfinding_state = None;
-        self.final_path.clear();
-        self.robot_pos = self.start_pos;
-    }
-
-    fn frontier_len(&self) -> usize {
-        if let Some(state) = &self.pathfinding_state {
-            state.frontier_len(&self.current_algorithm)
-        } else {
-            0
-        }
-    }
-
-    fn start_pathfinding(&mut self) {
-        self.clear_visualization();
-
-        if let (Some(start), Some(goal)) = (self.start_pos, self.goal_pos) {
-            let mut state = PathfindingState::new();
-            state.initialize(&self.current_algorithm, start, goal);
-            self.pathfinding_state = Some(state);
-            self.is_solving = true;
-            self.algorithm_info = self.current_algorithm.description().to_string();
-        }
-    }
-
-    fn step_pathfinding(&mut self) -> bool {
-        if !self.is_solving || self.pathfinding_state.is_none() {
-            return false;
-        }
-
-        let goal = self.goal_pos.unwrap();
-        let state = self.pathfinding_state.as_mut().unwrap();
-
-        let result = state.step(&self.current_algorithm, goal, &mut self.grid);
-
-        match result {
-            pathfinding_state::StepResult::Continue => false,
-            pathfinding_state::StepResult::PathFound(path) => {
-                self.final_path = path;
-                self.grid
-                    .mark_path(&self.final_path, self.start_pos, self.goal_pos);
-                self.is_solving = false;
-                true
-            }
-            pathfinding_state::StepResult::NoPath => {
-                self.is_solving = false;
-                false
-            }
-        }
-    }
-
-    fn handle_grid_click(&mut self, pos: Position) {
-        if !self.grid.is_valid_position(&pos) {
-            return;
-        }
-
-        match self.selected_tool {
-            Tool::SetStart => {
-                if let Some(old_start) = self.start_pos {
-                    if self.goal_pos != Some(old_start) {
-                        self.grid.set_cell(old_start, CellType::Empty);
-                    }
-                }
-                self.start_pos = Some(pos);
-                self.robot_pos = Some(pos);
-                self.grid.set_cell(pos, CellType::Start);
-            }
-            Tool::SetGoal => {
-                if let Some(old_goal) = self.goal_pos {
-                    if self.start_pos != Some(old_goal) {
-                        self.grid.set_cell(old_goal, CellType::Empty);
-                    }
-                }
-                self.goal_pos = Some(pos);
-                self.grid.set_cell(pos, CellType::Goal);
-            }
-            Tool::AddObstacle => {
-                if self.grid.get_cell(&pos) == CellType::Empty {
-                    self.grid.set_cell(pos, CellType::Obstacle);
-                }
-            }
-            Tool::RemoveObstacle => {
-                if self.grid.get_cell(&pos) == CellType::Obstacle {
-                    self.grid.set_cell(pos, CellType::Empty);
-                }
-            }
-        }
-    }
-}
-
-impl eframe::App for RoboNav {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        // Auto-stepping
-        if self.is_solving && !self.step_by_step {
-            let current_time = ctx.input(|i| i.time);
-            if current_time - self.last_step_time > self.auto_solve_speed as f64 {
-                self.step_pathfinding();
-                self.last_step_time = current_time;
-            }
-            ctx.request_repaint();
-        }
-
-        // Apply theme
-        ctx.set_style(self.theme.style());
-
-        // Render UI - split the rendering logic to avoid borrow issues
-        self.render_ui(ctx);
-    }
-}
-
-impl RoboNav {
-    fn render_ui(&mut self, ctx: &egui::Context) {
-        self.render_header(ctx);
-        self.render_main_content(ctx);
-        self.render_side_panel(ctx);
-    }
-
-    fn render_header(&mut self, ctx: &egui::Context) {
+    fn render_header(&mut self, ctx: &egui::Context, app: &mut RoboNav) {
         egui::TopBottomPanel::top("header_panel")
             .min_height(80.0)
             .show(ctx, |ui| {
@@ -251,24 +42,24 @@ impl RoboNav {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         // Settings toggle
                         if ui.button("⚙ Settings").clicked() {
-                            self.ui.show_settings = !self.ui.show_settings;
+                            self.show_settings = !self.show_settings;
                         }
 
                         ui.separator();
 
                         // Quick stats
-                        if let Some(state) = &self.pathfinding_state {
+                        if let Some(state) = &app.pathfinding_state {
                             ui.vertical(|ui| {
                                 ui.horizontal(|ui| {
                                     ui.label(format!("Steps: {}", state.step_count()));
                                     ui.separator();
-                                    ui.label(format!("Frontier: {}", self.frontier_len()));
+                                    ui.label(format!("Frontier: {}", app.frontier_len()));
                                     ui.separator();
                                     ui.label(format!("Visited: {}", state.closed_set_len()));
                                 });
 
-                                if !self.final_path.is_empty() {
-                                    ui.label(format!("🎯 Path Length: {}", self.final_path.len()));
+                                if !app.final_path.is_empty() {
+                                    ui.label(format!("🎯 Path Length: {}", app.final_path.len()));
                                 }
                             });
                         }
@@ -283,21 +74,21 @@ impl RoboNav {
                     ui.group(|ui| {
                         ui.label("Algorithm:");
                         egui::ComboBox::from_label("")
-                            .selected_text(format!("{:?}", self.current_algorithm))
+                            .selected_text(format!("{:?}", app.current_algorithm))
                             .width(100.0)
                             .show_ui(ui, |ui| {
                                 ui.selectable_value(
-                                    &mut self.current_algorithm,
+                                    &mut app.current_algorithm,
                                     Algorithm::Bfs,
                                     "BFS",
                                 );
                                 ui.selectable_value(
-                                    &mut self.current_algorithm,
+                                    &mut app.current_algorithm,
                                     Algorithm::Dfs,
                                     "DFS",
                                 );
                                 ui.selectable_value(
-                                    &mut self.current_algorithm,
+                                    &mut app.current_algorithm,
                                     Algorithm::AStar,
                                     "A*",
                                 );
@@ -310,22 +101,22 @@ impl RoboNav {
                     ui.group(|ui| {
                         let start_button =
                             egui::Button::new("▶ Start").min_size(egui::vec2(80.0, 30.0));
-                        if ui.add_enabled(!self.is_solving, start_button).clicked() {
-                            self.start_pathfinding();
+                        if ui.add_enabled(!app.is_solving, start_button).clicked() {
+                            app.start_pathfinding();
                         }
 
-                        if self.is_solving && self.step_by_step {
+                        if app.is_solving && app.step_by_step {
                             let next_button =
                                 egui::Button::new("⏭ Next").min_size(egui::vec2(80.0, 30.0));
                             if ui.add(next_button).clicked() {
-                                self.step_pathfinding();
+                                app.step_pathfinding();
                             }
                         }
 
                         let clear_button =
                             egui::Button::new("🗑 Clear").min_size(egui::vec2(80.0, 30.0));
                         if ui.add(clear_button).clicked() {
-                            self.clear_visualization();
+                            app.clear_visualization();
                         }
                     });
 
@@ -335,19 +126,15 @@ impl RoboNav {
                     ui.group(|ui| {
                         ui.label("Tool:");
                         ui.horizontal(|ui| {
+                            ui.selectable_value(&mut app.selected_tool, Tool::SetStart, "🟢 Start");
+                            ui.selectable_value(&mut app.selected_tool, Tool::SetGoal, "🔴 Goal");
                             ui.selectable_value(
-                                &mut self.selected_tool,
-                                Tool::SetStart,
-                                "🟢 Start",
-                            );
-                            ui.selectable_value(&mut self.selected_tool, Tool::SetGoal, "🔴 Goal");
-                            ui.selectable_value(
-                                &mut self.selected_tool,
+                                &mut app.selected_tool,
                                 Tool::AddObstacle,
                                 "⬛ Add Wall",
                             );
                             ui.selectable_value(
-                                &mut self.selected_tool,
+                                &mut app.selected_tool,
                                 Tool::RemoveObstacle,
                                 "⬜ Remove",
                             );
@@ -359,20 +146,20 @@ impl RoboNav {
             });
     }
 
-    fn render_main_content(&mut self, ctx: &egui::Context) {
+    fn render_main_content(&mut self, ctx: &egui::Context, app: &mut RoboNav) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 // Grid area
                 ui.vertical(|ui| {
-                    self.render_grid(ui);
+                    self.render_grid(ui, app);
                     ui.add_space(10.0);
-                    self.render_legend(ui);
+                    self.render_legend(ui, app);
                 });
             });
         });
     }
 
-    fn render_side_panel(&mut self, ctx: &egui::Context) {
+    fn render_side_panel(&mut self, ctx: &egui::Context, app: &mut RoboNav) {
         egui::SidePanel::right("side_panel")
             .min_width(300.0)
             .max_width(400.0)
@@ -381,21 +168,21 @@ impl RoboNav {
                 ui.separator();
 
                 // Settings section
-                if self.ui.show_settings {
+                if self.show_settings {
                     egui::CollapsingHeader::new("⚙ Display Settings")
                         .default_open(true)
                         .show(ui, |ui| {
-                            ui.checkbox(&mut self.show_heuristics, "Show Heuristics (h)");
-                            ui.checkbox(&mut self.show_costs, "Show Costs (g/f)");
-                            ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
-                            ui.checkbox(&mut self.show_visit_order, "Show Visit Order");
+                            ui.checkbox(&mut app.show_heuristics, "Show Heuristics (h)");
+                            ui.checkbox(&mut app.show_costs, "Show Costs (g/f)");
+                            ui.checkbox(&mut app.show_parent_arrows, "Show Parent Arrows");
+                            ui.checkbox(&mut app.show_visit_order, "Show Visit Order");
 
                             ui.separator();
-                            ui.checkbox(&mut self.step_by_step, "Step-by-Step Mode");
+                            ui.checkbox(&mut app.step_by_step, "Step-by-Step Mode");
 
-                            if !self.step_by_step {
+                            if !app.step_by_step {
                                 ui.add(
-                                    egui::Slider::new(&mut self.auto_solve_speed, 0.1..=2.0)
+                                    egui::Slider::new(&mut app.auto_solve_speed, 0.1..=2.0)
                                         .text("Auto Speed (s)")
                                         .show_value(true),
                                 );
@@ -405,40 +192,40 @@ impl RoboNav {
                 }
 
                 // Statistics
-                if self.ui.show_statistics {
-                    self.render_statistics(ui);
+                if self.show_statistics {
+                    self.render_statistics(ui, app);
                     ui.separator();
                 }
 
                 // Inspector
-                if self.ui.show_inspector {
-                    self.render_inspector(ui);
+                if self.show_inspector {
+                    self.render_inspector(ui, app);
                 }
 
                 // Algorithm info
-                if !self.algorithm_info.is_empty() {
+                if !app.algorithm_info.is_empty() {
                     ui.separator();
                     egui::CollapsingHeader::new("ℹ Algorithm Info")
                         .default_open(false)
                         .show(ui, |ui| {
-                            ui.label(self.algorithm_info.as_str());
+                            ui.label(app.algorithm_info.as_str());
                         });
                 }
             });
     }
 
-    fn render_grid(&mut self, ui: &mut egui::Ui) {
+    fn render_grid(&self, ui: &mut egui::Ui, app: &mut RoboNav) {
         let grid_size = egui::Vec2::new(
-            self.grid.width() as f32 * CELL_SIZE,
-            self.grid.height() as f32 * CELL_SIZE,
+            app.grid.width() as f32 * CELL_SIZE,
+            app.grid.height() as f32 * CELL_SIZE,
         );
 
         let (response, painter) = ui.allocate_painter(grid_size, egui::Sense::click());
         let rect = response.rect;
 
         // Draw parent arrows first (underneath)
-        if self.show_parent_arrows {
-            if let Some(state) = &self.pathfinding_state {
+        if app.show_parent_arrows {
+            if let Some(state) = &app.pathfinding_state {
                 for (child, parent) in state.came_from() {
                     let from = rect.min
                         + egui::Vec2::new(
@@ -452,7 +239,7 @@ impl RoboNav {
                         );
 
                     // Arrow line
-                    painter.line_segment([from, to], egui::Stroke::new(2.0, self.theme.border));
+                    painter.line_segment([from, to], egui::Stroke::new(2.0, app.theme.border));
 
                     // Arrow head
                     let direction = (to - from).normalized();
@@ -463,54 +250,54 @@ impl RoboNav {
 
                     painter.add(egui::Shape::convex_polygon(
                         vec![to, arrow_tip + perpendicular, arrow_tip - perpendicular],
-                        self.theme.border,
+                        app.theme.border,
                         egui::Stroke::NONE,
                     ));
                 }
             }
         }
 
-        let cell_colors = self.theme.cell_colors();
+        let cell_colors = app.theme.cell_colors();
 
         // Draw grid cells
-        for y in 0..self.grid.height() {
-            for x in 0..self.grid.width() {
+        for y in 0..app.grid.height() {
+            for x in 0..app.grid.width() {
                 let pos = Position::new(x as i32, y as i32);
                 let cell_rect = egui::Rect::from_min_size(
                     rect.min + egui::Vec2::new(x as f32 * CELL_SIZE, y as f32 * CELL_SIZE),
                     egui::Vec2::splat(CELL_SIZE),
                 );
 
-                let mut cell_type = self.grid.get_cell(&pos);
+                let mut cell_type = app.grid.get_cell(&pos);
 
                 // Override with start/goal positions
-                if Some(pos) == self.start_pos {
-                    cell_type = grid::CellType::Start;
-                } else if Some(pos) == self.goal_pos {
-                    cell_type = grid::CellType::Goal;
+                if Some(pos) == app.start_pos {
+                    cell_type = crate::grid::CellType::Start;
+                } else if Some(pos) == app.goal_pos {
+                    cell_type = crate::grid::CellType::Goal;
                 }
 
                 let cell_color = match cell_type {
-                    grid::CellType::Empty => cell_colors.empty,
-                    grid::CellType::Obstacle => cell_colors.obstacle,
-                    grid::CellType::Start => cell_colors.start,
-                    grid::CellType::Goal => cell_colors.goal,
-                    grid::CellType::Path => cell_colors.path,
-                    grid::CellType::Visited => cell_colors.visited,
-                    grid::CellType::Frontier => cell_colors.frontier,
-                    grid::CellType::Current => cell_colors.current,
+                    crate::grid::CellType::Empty => cell_colors.empty,
+                    crate::grid::CellType::Obstacle => cell_colors.obstacle,
+                    crate::grid::CellType::Start => cell_colors.start,
+                    crate::grid::CellType::Goal => cell_colors.goal,
+                    crate::grid::CellType::Path => cell_colors.path,
+                    crate::grid::CellType::Visited => cell_colors.visited,
+                    crate::grid::CellType::Frontier => cell_colors.frontier,
+                    crate::grid::CellType::Current => cell_colors.current,
                 };
 
                 painter.rect_filled(cell_rect, 4.0, cell_color);
                 painter.rect_stroke(
                     cell_rect,
                     4.0,
-                    egui::Stroke::new(1.0, self.theme.border),
+                    egui::Stroke::new(1.0, app.theme.border),
                     egui::StrokeKind::Middle,
                 );
 
                 // Draw robot
-                if Some(pos) == self.robot_pos {
+                if Some(pos) == app.robot_pos {
                     painter.circle_filled(
                         cell_rect.center(),
                         CELL_SIZE * 0.25,
@@ -524,11 +311,11 @@ impl RoboNav {
                 }
 
                 // Draw cost/heuristic numbers
-                if self.show_heuristics || self.show_costs {
-                    if let Some(state) = &self.pathfinding_state {
+                if app.show_heuristics || app.show_costs {
+                    if let Some(state) = &app.pathfinding_state {
                         let mut text_lines = Vec::new();
 
-                        if self.show_costs {
+                        if app.show_costs {
                             if let Some(g) = state.g_cost(&pos) {
                                 text_lines.push(format!("g:{}", g));
                             }
@@ -536,7 +323,7 @@ impl RoboNav {
                                 text_lines.push(format!("f:{}", f));
                             }
                         }
-                        if self.show_heuristics {
+                        if app.show_heuristics {
                             if let Some(h) = state.h_cost(&pos) {
                                 text_lines.push(format!("h:{}", h));
                             }
@@ -564,16 +351,16 @@ impl RoboNav {
                 let relative_pos = pointer_pos - rect.min;
                 let grid_x = (relative_pos.x / CELL_SIZE) as i32;
                 let grid_y = (relative_pos.y / CELL_SIZE) as i32;
-                self.handle_grid_click(Position::new(grid_x, grid_y));
+                app.handle_grid_click(Position::new(grid_x, grid_y));
             }
         }
     }
 
-    fn render_legend(&self, ui: &mut egui::Ui) {
+    fn render_legend(&self, ui: &mut egui::Ui, app: &RoboNav) {
         ui.group(|ui| {
             ui.label(egui::RichText::new("Legend").strong());
             ui.horizontal_wrapped(|ui| {
-                let cell_colors = self.theme.cell_colors();
+                let cell_colors = app.theme.cell_colors();
                 let legend_items = [
                     ("Empty", cell_colors.empty),
                     ("Obstacle", cell_colors.obstacle),
@@ -593,7 +380,7 @@ impl RoboNav {
                         ui.painter().rect_stroke(
                             rect,
                             2.0,
-                            egui::Stroke::new(1.0, self.theme.border),
+                            egui::Stroke::new(1.0, app.theme.border),
                             egui::StrokeKind::Middle,
                         );
                         ui.label(name);
@@ -603,11 +390,11 @@ impl RoboNav {
         });
     }
 
-    fn render_statistics(&self, ui: &mut egui::Ui) {
+    fn render_statistics(&self, ui: &mut egui::Ui, app: &RoboNav) {
         egui::CollapsingHeader::new("📊 Statistics")
             .default_open(true)
             .show(ui, |ui| {
-                if let Some(state) = &self.pathfinding_state {
+                if let Some(state) = &app.pathfinding_state {
                     ui.horizontal(|ui| {
                         ui.label("Steps:");
                         ui.label(egui::RichText::new(format!("{}", state.step_count())).strong());
@@ -615,7 +402,7 @@ impl RoboNav {
 
                     ui.horizontal(|ui| {
                         ui.label("Frontier Size:");
-                        ui.label(egui::RichText::new(format!("{}", self.frontier_len())).strong());
+                        ui.label(egui::RichText::new(format!("{}", app.frontier_len())).strong());
                     });
 
                     ui.horizontal(|ui| {
@@ -625,26 +412,26 @@ impl RoboNav {
                         );
                     });
 
-                    if !self.final_path.is_empty() {
+                    if !app.final_path.is_empty() {
                         ui.separator();
                         ui.horizontal(|ui| {
                             ui.label("Path Length:");
                             ui.label(
-                                egui::RichText::new(format!("{}", self.final_path.len()))
+                                egui::RichText::new(format!("{}", app.final_path.len()))
                                     .strong()
-                                    .color(self.theme.success),
+                                    .color(app.theme.success),
                             );
                         });
 
                         if let Some(path_cost) =
-                            self.final_path.last().and_then(|pos| state.g_cost(pos))
+                            app.final_path.last().and_then(|pos| state.g_cost(pos))
                         {
                             ui.horizontal(|ui| {
                                 ui.label("Path Cost:");
                                 ui.label(
                                     egui::RichText::new(format!("{}", path_cost))
                                         .strong()
-                                        .color(self.theme.success),
+                                        .color(app.theme.success),
                                 );
                             });
                         }
@@ -655,11 +442,11 @@ impl RoboNav {
             });
     }
 
-    fn render_inspector(&self, ui: &mut egui::Ui) {
+    fn render_inspector(&self, ui: &mut egui::Ui, app: &RoboNav) {
         egui::CollapsingHeader::new("🔍 Step Inspector")
             .default_open(true)
             .show(ui, |ui| {
-                if let Some(state) = &self.pathfinding_state {
+                if let Some(state) = &app.pathfinding_state {
                     if !state.last_step_info().is_empty() {
                         ui.group(|ui| {
                             ui.label("Current Step:");
@@ -705,9 +492,9 @@ impl RoboNav {
                                                     if neighbor.decision.contains("push")
                                                         || neighbor.decision.contains("enqueue")
                                                     {
-                                                        self.theme.success
+                                                        app.theme.success
                                                     } else {
-                                                        self.theme.warning
+                                                        app.theme.warning
                                                     },
                                                 ),
                                         );
@@ -723,7 +510,7 @@ impl RoboNav {
                             ui.label(
                                 egui::RichText::new(format!("({}, {})", current.x, current.y))
                                     .strong()
-                                    .color(self.theme.accent),
+                                    .color(app.theme.accent),
                             );
                         });
                     }
@@ -732,21 +519,4 @@ impl RoboNav {
                 }
             });
     }
-}
-
-// Entry point
-fn main() -> Result<(), eframe::Error> {
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1200.0, 800.0])
-            .with_min_inner_size([800.0, 600.0])
-            .with_icon(eframe::icon_data::from_png_bytes(&[]).unwrap_or_default()),
-        ..Default::default()
-    };
-
-    eframe::run_native(
-        "RoboNav - Pathfinding Visualizer",
-        options,
-        Box::new(|cc| Ok(Box::new(RoboNav::new(cc)))),
-    )
 }
