@@ -9,7 +9,6 @@ mod theme;
 mod tools;
 
 use algorithms::Algorithm;
-use egui::{FontData, epaint::text::FontInsert};
 use grid::{CellType, Grid};
 use pathfinding_state::PathfindingState;
 use position::Position;
@@ -236,7 +235,6 @@ impl RoboNav {
                 ui.add_space(8.0);
 
                 ui.horizontal(|ui| {
-                    // Title and logo area
                     ui.vertical(|ui| {
                         ui.heading(egui::RichText::new("RoboNav").size(24.0).strong());
                         ui.label(
@@ -277,7 +275,7 @@ impl RoboNav {
                             });
                     });
 
-                    ui.separator();
+                    // ui.separator();
 
                     // Control buttons
                     ui.group(|ui| {
@@ -302,7 +300,7 @@ impl RoboNav {
                         }
                     });
 
-                    ui.separator();
+                    // ui.separator();
 
                     // Tools
                     ui.group(|ui| {
@@ -541,9 +539,9 @@ impl RoboNav {
                     ("Start", CellType::Start.color()),
                     ("Goal", CellType::Goal.color()),
                     ("Path", CellType::Path.color()),
-                    ("Visited", CellType::Current.color()),
+                    ("Visited", CellType::Visited.color()),
                     ("Frontier", CellType::Frontier.color()),
-                    ("Current", CellType::Visited.color()),
+                    ("Current", CellType::Current.color()),
                 ];
 
                 for (name, color) in legend_items {
@@ -695,7 +693,7 @@ impl RoboNav {
     }
 }
 
-// Entry point
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
@@ -710,4 +708,43 @@ fn main() -> Result<(), eframe::Error> {
         options,
         Box::new(|cc| Ok(Box::new(RoboNav::new(cc)))),
     )
+}
+
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast as _;
+    let web_options = eframe::WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        let document = eframe::web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+
+        let canvas = document
+            .get_element_by_id("main_canvas")
+            .expect("Failed to find the_canvas_id")
+            .dyn_into::<eframe::web_sys::HtmlCanvasElement>()
+            .expect("the_canvas_id was not a HtmlCanvasElement");
+
+        let start_result = eframe::WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|cc| Ok(Box::new(RoboNav::new(cc)))),
+            )
+            .await;
+
+        if let Some(loading_text) = document.get_element_by_id("loading_text") {
+            match start_result {
+                Ok(_) => {
+                    loading_text.remove();
+                }
+                Err(e) => {
+                    loading_text.set_inner_html("<p> Robonav: Err :-(</p>");
+                    panic!("Failed to start eframe: {e:?}");
+                }
+            }
+        }
+    });
 }

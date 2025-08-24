@@ -107,9 +107,12 @@ impl Grid {
         goal_pos: Option<Position>,
     ) {
         for &pos in positions {
-            if Some(pos) != start_pos && Some(pos) != goal_pos {
+            if Some(pos) != start_pos && Some(pos) != goal_pos
+            // || start_pos == None && goal_pos == None
+            {
                 if self.get_cell(&pos) == CellType::Empty
                     || self.get_cell(&pos) == CellType::Frontier
+                    || self.get_cell(&pos) == CellType::Current
                 {
                     self.set_cell(pos, CellType::Visited);
                 }
@@ -136,7 +139,6 @@ impl Grid {
         self.set_cell(pos, CellType::Current);
     }
 
-    // Get all neighbors of a position that are valid and walkable
     pub fn get_walkable_neighbors(&self, pos: &Position) -> Vec<Position> {
         pos.neighbors()
             .into_iter()

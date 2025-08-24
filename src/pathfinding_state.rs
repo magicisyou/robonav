@@ -218,8 +218,8 @@ impl PathfindingState {
         grid.mark_current(current);
 
         let g = *self.g_costs.get(&current).unwrap_or(&0);
-        let h = current.manhattan_distance_to(&goal);
-        self.h_costs.insert(current, h);
+        // let h = current.manhattan_distance_to(&goal);
+        // self.h_costs.insert(current, h);
 
         self.last_step_info = format!(
             "Step {}: pop ({}, {}) at distance g={} (queue={}, closed={})",
