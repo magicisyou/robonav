@@ -1,5 +1,7 @@
 use crate::position::Position;
 
+use egui::Color32;
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum CellType {
     Empty,
@@ -10,6 +12,21 @@ pub enum CellType {
     Visited,
     Frontier,
     Current,
+}
+
+impl CellType {
+    pub fn color(&self) -> Color32 {
+        match self {
+            Self::Empty => Color32::from_rgb(255, 245, 242), // Slate-50
+            Self::Obstacle => Color32::from_rgb(104, 155, 138),
+            Self::Start => Color32::from_rgb(159, 200, 126),
+            Self::Goal => Color32::from_rgb(218, 108, 108),
+            Self::Path => Color32::from_rgb(163, 220, 154),
+            Self::Visited => Color32::from_rgb(203, 213, 225), // Slate-300
+            Self::Frontier => Color32::from_rgb(254, 240, 138), // Yellow-200
+            Self::Current => Color32::from_rgb(255, 230, 225), // Orange-400
+        }
+    }
 }
 
 pub struct Grid {

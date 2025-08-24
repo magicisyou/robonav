@@ -85,14 +85,14 @@ impl PathfindingState {
             Algorithm::Bfs => {
                 self.bfs_queue.push_back(start);
                 self.g_costs.insert(start, 0);
-                self.h_costs
-                    .insert(start, start.manhattan_distance_to(&goal));
+                // self.h_costs
+                // .insert(start, start.manhattan_distance_to(&goal));
             }
             Algorithm::Dfs => {
                 self.dfs_stack.push(start);
                 self.g_costs.insert(start, 0);
-                self.h_costs
-                    .insert(start, start.manhattan_distance_to(&goal));
+                // self.h_costs
+                // .insert(start, start.manhattan_distance_to(&goal));
             }
         }
     }
@@ -244,7 +244,7 @@ impl PathfindingState {
                 self.last_neighbors.push(NeighborInfo {
                     pos: neighbor,
                     g: None,
-                    h: Some(neighbor.manhattan_distance_to(&goal)),
+                    h: None,
                     f: None,
                     decision: "skip: already seen".to_string(),
                 });
@@ -254,15 +254,15 @@ impl PathfindingState {
             let new_g = g + 1;
             self.came_from.insert(neighbor, current);
             self.g_costs.insert(neighbor, new_g);
-            self.h_costs
-                .insert(neighbor, neighbor.manhattan_distance_to(&goal));
+            // self.h_costs
+            // .insert(neighbor, neighbor.manhattan_distance_to(&goal));
             self.bfs_queue.push_back(neighbor);
             grid.mark_frontier(&[neighbor], None, None);
 
             self.last_neighbors.push(NeighborInfo {
                 pos: neighbor,
                 g: Some(new_g),
-                h: Some(neighbor.manhattan_distance_to(&goal)),
+                h: None,
                 f: None,
                 decision: "enqueue".to_string(),
             });
@@ -297,8 +297,8 @@ impl PathfindingState {
             self.dfs_stack.len(),
             self.closed_set.len()
         );
-        self.h_costs
-            .insert(current, current.manhattan_distance_to(&goal));
+        // self.h_costs
+        // .insert(current, current.manhattan_distance_to(&goal));
         self.last_neighbors.clear();
 
         if current == goal {
@@ -314,7 +314,7 @@ impl PathfindingState {
                 self.last_neighbors.push(NeighborInfo {
                     pos: neighbor,
                     g: None,
-                    h: Some(neighbor.manhattan_distance_to(&goal)),
+                    h: None,
                     f: None,
                     decision: "skip: already seen".to_string(),
                 });
@@ -324,15 +324,15 @@ impl PathfindingState {
             let new_g = g + 1;
             self.came_from.insert(neighbor, current);
             self.g_costs.insert(neighbor, new_g);
-            self.h_costs
-                .insert(neighbor, neighbor.manhattan_distance_to(&goal));
+            // self.h_costs
+            // .insert(neighbor, neighbor.manhattan_distance_to(&goal));
             self.dfs_stack.push(neighbor);
             grid.mark_frontier(&[neighbor], None, None);
 
             self.last_neighbors.push(NeighborInfo {
                 pos: neighbor,
                 g: Some(new_g),
-                h: Some(neighbor.manhattan_distance_to(&goal)),
+                h: None,
                 f: None,
                 decision: "push".to_string(),
             });

@@ -1,4 +1,9 @@
 use eframe::egui;
+use egui::Color32;
+
+const BG_COLOR: Color32 = Color32::from_rgb(231, 239, 199);
+const BORDER_COLOR: Color32 = Color32::from_rgb(202, 220, 174);
+const FG_COLOR: Color32 = Color32::from_rgb(85, 88, 121);
 
 #[derive(Clone, Debug)]
 pub struct Theme {
@@ -11,22 +16,20 @@ pub struct Theme {
     pub border: egui::Color32,
     pub success: egui::Color32,
     pub warning: egui::Color32,
-    pub error: egui::Color32,
 }
 
 impl Default for Theme {
     fn default() -> Self {
         Self {
-            primary: egui::Color32::from_rgb(79, 70, 229), // Indigo-600
-            secondary: egui::Color32::from_rgb(99, 102, 241), // Indigo-500
-            accent: egui::Color32::from_rgb(139, 92, 246), // Violet-500
-            background: egui::Color32::from_rgb(15, 23, 42), // Slate-900
-            surface: egui::Color32::from_rgb(30, 41, 59),  // Slate-800
-            on_surface: egui::Color32::from_rgb(241, 245, 249), // Slate-100
-            border: egui::Color32::from_rgb(51, 65, 85),   // Slate-700
+            primary: egui::Color32::from_rgb(205, 193, 255),
+            secondary: egui::Color32::from_rgb(197, 176, 205),
+            accent: egui::Color32::from_rgb(197, 176, 205),
+            background: BG_COLOR,
+            surface: egui::Color32::from_rgb(222, 211, 196),
+            on_surface: FG_COLOR,
+            border: BORDER_COLOR,
             success: egui::Color32::from_rgb(34, 197, 94), // Green-500
             warning: egui::Color32::from_rgb(251, 191, 36), // Amber-400
-            error: egui::Color32::from_rgb(239, 68, 68),   // Red-500
         }
     }
 }
@@ -35,10 +38,8 @@ impl Theme {
     pub fn style(&self) -> egui::Style {
         let mut style = egui::Style::default();
 
-        // Set dark theme as base
-        style.visuals = egui::Visuals::dark();
+        style.visuals = egui::Visuals::light();
 
-        // Customize colors
         style.visuals.window_fill = self.surface;
         style.visuals.panel_fill = self.background;
         style.visuals.extreme_bg_color = self.background;
@@ -87,29 +88,4 @@ impl Theme {
 
         style
     }
-
-    // Cell colors for the grid
-    pub fn cell_colors(&self) -> CellColors {
-        CellColors {
-            empty: egui::Color32::from_rgb(248, 250, 252), // Slate-50
-            obstacle: egui::Color32::from_rgb(30, 30, 30), // Almost black
-            start: self.success,
-            goal: self.error,
-            path: self.primary,
-            visited: egui::Color32::from_rgb(203, 213, 225), // Slate-300
-            frontier: egui::Color32::from_rgb(254, 240, 138), // Yellow-200
-            current: egui::Color32::from_rgb(251, 146, 60),  // Orange-400
-        }
-    }
-}
-
-pub struct CellColors {
-    pub empty: egui::Color32,
-    pub obstacle: egui::Color32,
-    pub start: egui::Color32,
-    pub goal: egui::Color32,
-    pub path: egui::Color32,
-    pub visited: egui::Color32,
-    pub frontier: egui::Color32,
-    pub current: egui::Color32,
 }

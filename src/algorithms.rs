@@ -1,4 +1,3 @@
-
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Algorithm {
     AStar,
@@ -21,25 +20,25 @@ impl Algorithm {
         }
     }
 
-    pub fn complexity_info(&self) -> (&'static str, &'static str) {
-        match self {
-            Algorithm::AStar => ("O(b^d)", "O(b^d)"),
-            Algorithm::Bfs => ("O(b^d)", "O(b^d)"),
-            Algorithm::Dfs => ("O(b^m)", "O(bm)"),
-        }
-    }
+    // pub fn complexity_info(&self) -> (&'static str, &'static str) {
+    //     match self {
+    //         Algorithm::AStar => ("O(b^d)", "O(b^d)"),
+    //         Algorithm::Bfs => ("O(b^d)", "O(b^d)"),
+    //         Algorithm::Dfs => ("O(b^m)", "O(bm)"),
+    //     }
+    // }
 
-    pub fn guarantees_optimal(&self) -> bool {
-        match self {
-            Algorithm::AStar | Algorithm::Bfs => true,
-            Algorithm::Dfs => false,
-        }
-    }
+    // pub fn guarantees_optimal(&self) -> bool {
+    //     match self {
+    //         Algorithm::AStar | Algorithm::Bfs => true,
+    //         Algorithm::Dfs => false,
+    //     }
+    // }
 
-    pub fn is_informed(&self) -> bool {
-        match self {
-            Algorithm::AStar => true,
-            Algorithm::Bfs | Algorithm::Dfs => false,
-        }
-    }
+    // pub fn is_informed(&self) -> bool {
+    //     match self {
+    //         Algorithm::AStar => true,
+    //         Algorithm::Bfs | Algorithm::Dfs => false,
+    //     }
+    // }
 }
