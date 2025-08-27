@@ -28,18 +28,15 @@ pub struct RoboNav {
     pathfinding_state: Option<PathfindingState>,
     final_path: Vec<Position>,
 
-    // UI Settings
     show_heuristics: bool,
     show_costs: bool,
     show_parent_arrows: bool,
-    show_visit_order: bool,
     step_by_step: bool,
     auto_solve_speed: f32,
     last_step_time: f64,
     selected_tool: Tool,
     algorithm_info: String,
 
-    // UI Components - simplified to avoid borrow issues
     ui: UIState,
     theme: Theme,
 }
@@ -48,7 +45,6 @@ pub struct RoboNav {
 pub struct UIState {
     pub show_inspector: bool,
     pub show_statistics: bool,
-    // pub show_settings: bool,
 }
 
 impl Default for UIState {
@@ -89,7 +85,7 @@ impl Default for RoboNav {
             show_heuristics: true,
             show_costs: true,
             show_parent_arrows: true,
-            show_visit_order: false,
+            // show_visit_order: false,
             step_by_step: true,
             auto_solve_speed: 0.5,
             last_step_time: 0.0,
@@ -250,7 +246,6 @@ impl RoboNav {
 
                 // Main controls
                 ui.horizontal(|ui| {
-                    // Algorithm selection
                     ui.group(|ui| {
                         ui.label("Algorithm:");
                         egui::ComboBox::from_label("")
@@ -274,8 +269,6 @@ impl RoboNav {
                                 );
                             });
                     });
-
-                    // ui.separator();
 
                     // Control buttons
                     ui.group(|ui| {
@@ -320,7 +313,7 @@ impl RoboNav {
                             ui.selectable_value(
                                 &mut self.selected_tool,
                                 Tool::RemoveObstacle,
-                                "⬜ Remove",
+                                "⬜ Remove Wall",
                             );
                         });
                     });
@@ -333,7 +326,6 @@ impl RoboNav {
     fn render_main_content(&mut self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // Grid area
                 ui.vertical(|ui| {
                     self.render_grid(ui);
                     ui.add_space(10.0);
@@ -348,18 +340,13 @@ impl RoboNav {
             .min_width(300.0)
             .max_width(400.0)
             .show(ctx, |ui| {
-                ui.heading("Control Panel");
-                ui.separator();
-
-                // Settings section
-                // if self.ui.show_settings {
                 egui::CollapsingHeader::new("⚙ Display Settings")
                     .default_open(true)
                     .show(ui, |ui| {
                         ui.checkbox(&mut self.show_heuristics, "Show Heuristics (h)");
                         ui.checkbox(&mut self.show_costs, "Show Costs (g/f)");
-                        ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
-                        ui.checkbox(&mut self.show_visit_order, "Show Visit Order");
+                        // ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
+                        // ui.checkbox(&mut self.show_visit_order, "Show Visit Order");
 
                         ui.separator();
                         ui.checkbox(&mut self.step_by_step, "Step-by-Step Mode");
@@ -373,7 +360,6 @@ impl RoboNav {
                         }
                     });
                 ui.separator();
-                // }
 
                 // Statistics
                 if self.ui.show_statistics {

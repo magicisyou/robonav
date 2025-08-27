@@ -112,12 +112,16 @@ impl Grid {
             {
                 if self.get_cell(&pos) == CellType::Empty
                     || self.get_cell(&pos) == CellType::Frontier
-                    || self.get_cell(&pos) == CellType::Current
+                // || self.get_cell(&pos) == CellType::Current
                 {
                     self.set_cell(pos, CellType::Visited);
                 }
             }
         }
+    }
+
+    pub fn mark_previous_node_as_visited(&mut self, position: Position) {
+        self.set_cell(position, CellType::Visited);
     }
 
     pub fn mark_frontier(

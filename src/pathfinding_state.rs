@@ -38,6 +38,7 @@ pub struct PathfindingState {
     // Inspector: details of the last step
     last_step_info: String,
     last_neighbors: Vec<NeighborInfo>,
+    previous_node: Option<Position>,
 }
 
 impl Default for PathfindingState {
@@ -55,6 +56,7 @@ impl Default for PathfindingState {
             step_count: 0,
             last_step_info: String::new(),
             last_neighbors: Vec::new(),
+            previous_node: None,
         }
     }
 }
@@ -116,6 +118,10 @@ impl PathfindingState {
         self.current_node = Some(current_node.position);
         self.step_count += 1;
 
+        if let Some(previous_node) = self.previous_node {
+            grid.mark_previous_node_as_visited(previous_node);
+        }
+        self.previous_node = Some(current_node.position);
         grid.mark_current(current_node.position);
 
         self.last_step_info = format!(
@@ -215,6 +221,10 @@ impl PathfindingState {
         self.closed_set.insert(current);
         self.step_count += 1;
 
+        if let Some(previous_node) = self.previous_node {
+            grid.mark_previous_node_as_visited(previous_node);
+        }
+        self.previous_node = Some(current);
         grid.mark_current(current);
 
         let g = *self.g_costs.get(&current).unwrap_or(&0);
@@ -285,6 +295,10 @@ impl PathfindingState {
         self.closed_set.insert(current);
         self.step_count += 1;
 
+        if let Some(previous_node) = self.previous_node {
+            grid.mark_previous_node_as_visited(previous_node);
+        }
+        self.previous_node = Some(current);
         grid.mark_current(current);
 
         let g = *self.g_costs.get(&current).unwrap_or(&0);
