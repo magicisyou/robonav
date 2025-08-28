@@ -9,6 +9,7 @@ mod theme;
 mod tools;
 
 use algorithms::Algorithm;
+// use egui::ImageSource;
 use grid::{CellType, Grid};
 use pathfinding_state::PathfindingState;
 use position::Position;
@@ -16,12 +17,60 @@ use theme::Theme;
 use tools::Tool;
 
 const CELL_SIZE: f32 = 50.0;
+// const GITHUB_MARK: ImageSource = egui::include_image!("../assets/github-mark.svg");
+
+const DEFAULT_OBSTACLES: [[i32; 2]; 44] = [
+    [0, 3],
+    [1, 3],
+    [3, 3],
+    [3, 2],
+    [3, 1],
+    [3, 0],
+    [4, 3],
+    [5, 3],
+    [6, 3],
+    [6, 2],
+    [6, 1],
+    [6, 0],
+    [8, 3],
+    [9, 3],
+    [10, 3],
+    [10, 2],
+    [10, 1],
+    [10, 0],
+    [0, 6],
+    [1, 6],
+    [2, 6],
+    [3, 6],
+    [4, 6],
+    [5, 6],
+    [7, 6],
+    [8, 6],
+    [9, 6],
+    [11, 6],
+    [12, 6],
+    [13, 6],
+    [15, 6],
+    [16, 6],
+    [17, 6],
+    [18, 6],
+    [19, 6],
+    [20, 6],
+    [16, 13],
+    [16, 12],
+    [16, 11],
+    [16, 10],
+    [16, 9],
+    [16, 8],
+    [19, 8],
+    [20, 8],
+];
 
 pub struct RoboNav {
     grid: Grid,
     start_pos: Option<Position>,
     goal_pos: Option<Position>,
-    robot_pos: Option<Position>,
+    // robot_pos: Option<Position>,
     current_algorithm: Algorithm,
     is_solving: bool,
     solving_step: usize,
@@ -64,18 +113,18 @@ impl Default for RoboNav {
         let mut grid = Grid::new(width, height);
 
         // Add some default obstacles
-        for i in 5..15 {
-            grid.set_cell(Position::new(i, 7), CellType::Obstacle);
-        }
-        for i in 2..8 {
-            grid.set_cell(Position::new(12, i), CellType::Obstacle);
+        for obstacle_pos in DEFAULT_OBSTACLES {
+            grid.set_cell(
+                Position::new(obstacle_pos[0], obstacle_pos[1]),
+                CellType::Obstacle,
+            );
         }
 
         Self {
             grid,
-            start_pos: Some(Position::new(2, 2)),
-            goal_pos: Some(Position::new(17, 12)),
-            robot_pos: Some(Position::new(2, 2)),
+            start_pos: Some(Position::new(1, 1)),
+            goal_pos: Some(Position::new(17, 10)),
+            // robot_pos: Some(Position::new(2, 2)),
             current_algorithm: Algorithm::AStar,
             is_solving: false,
             solving_step: 0,
@@ -112,7 +161,7 @@ impl RoboNav {
         self.solving_step = 0;
         self.pathfinding_state = None;
         self.final_path.clear();
-        self.robot_pos = self.start_pos;
+        // self.robot_pos = self.start_pos;
     }
 
     fn frontier_len(&self) -> usize {
@@ -174,7 +223,7 @@ impl RoboNav {
                     }
                 }
                 self.start_pos = Some(pos);
-                self.robot_pos = Some(pos);
+                // self.robot_pos = Some(pos);
                 self.grid.set_cell(pos, CellType::Start);
             }
             Tool::SetGoal => {
@@ -233,12 +282,34 @@ impl RoboNav {
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
                         ui.heading(egui::RichText::new("RoboNav").size(24.0).strong());
-                        ui.label(
-                            egui::RichText::new("Developed with ♥ by Akshy Bose")
-                                .size(18.0)
-                                .color(egui::Color32::RED)
-                                .strong(),
-                        );
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                egui::RichText::new("Developed with")
+                                    .size(18.0)
+                                    // .color(egui::Color32::RED)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("♥")
+                                    .size(18.0)
+                                    .color(egui::Color32::RED)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("by")
+                                    .size(18.0)
+                                    // .color(egui::Color32::RED)
+                                    .strong(),
+                            );
+                            ui.label(
+                                egui::RichText::new("Akshy Bose")
+                                    .size(18.0)
+                                    .color(egui::Color32::RED)
+                                    .strong(),
+                            );
+                            // ui.add(egui::ImageButton::new(GITHUB_MARK));
+                        });
+                        // ui.hyperlink_to("source code", "https://github.com/magicisyou/robonav");
                     });
                 });
 
@@ -297,7 +368,6 @@ impl RoboNav {
 
                     // Tools
                     ui.group(|ui| {
-                        ui.label("Tool:");
                         ui.horizontal(|ui| {
                             ui.selectable_value(
                                 &mut self.selected_tool,
@@ -456,18 +526,18 @@ impl RoboNav {
                 );
 
                 // Draw robot
-                if Some(pos) == self.robot_pos {
-                    painter.circle_filled(
-                        cell_rect.center(),
-                        CELL_SIZE * 0.25,
-                        egui::Color32::DARK_GREEN,
-                    );
-                    painter.circle_stroke(
-                        cell_rect.center(),
-                        CELL_SIZE * 0.25,
-                        egui::Stroke::new(2.0, egui::Color32::WHITE),
-                    );
-                }
+                // if Some(pos) == self.robot_pos {
+                //     painter.circle_filled(
+                //         cell_rect.center(),
+                //         CELL_SIZE * 0.25,
+                //         egui::Color32::DARK_GREEN,
+                //     );
+                //     painter.circle_stroke(
+                //         cell_rect.center(),
+                //         CELL_SIZE * 0.25,
+                //         egui::Stroke::new(2.0, egui::Color32::WHITE),
+                //     );
+                // }
 
                 // Draw cost/heuristic numbers
                 if self.show_heuristics || self.show_costs {
@@ -692,7 +762,10 @@ fn main() -> Result<(), eframe::Error> {
     eframe::run_native(
         "RoboNav",
         options,
-        Box::new(|cc| Ok(Box::new(RoboNav::new(cc)))),
+        Box::new(|cc| {
+            // egui_extras::install_image_loaders(&cc.egui_ctx);
+            Ok(Box::new(RoboNav::new(cc)))
+        }),
     )
 }
 
