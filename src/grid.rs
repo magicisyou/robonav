@@ -17,7 +17,7 @@ pub enum CellType {
 impl CellType {
     pub fn color(&self) -> Color32 {
         match self {
-            Self::Empty => Color32::from_rgb(255, 245, 242), // Slate-50
+            Self::Empty => Color32::from_rgb(240, 241, 197),
             Self::Obstacle => Color32::from_rgb(104, 155, 138),
             Self::Start => Color32::from_rgb(159, 200, 126),
             Self::Goal => Color32::from_rgb(218, 108, 108),

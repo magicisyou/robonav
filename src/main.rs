@@ -415,7 +415,7 @@ impl RoboNav {
                     .show(ui, |ui| {
                         ui.checkbox(&mut self.show_heuristics, "Show Heuristics (h)");
                         ui.checkbox(&mut self.show_costs, "Show Costs (g/f)");
-                        // ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
+                        ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
                         // ui.checkbox(&mut self.show_visit_order, "Show Visit Order");
 
                         ui.separator();
@@ -424,7 +424,7 @@ impl RoboNav {
                         if !self.step_by_step {
                             ui.add(
                                 egui::Slider::new(&mut self.auto_solve_speed, 0.0..=2.0)
-                                    .text("Auto Speed (s)")
+                                    .text("Time Delay (s)")
                                     .show_value(true),
                             );
                         }
@@ -463,40 +463,6 @@ impl RoboNav {
         let (response, painter) = ui.allocate_painter(grid_size, egui::Sense::click());
         let rect = response.rect;
 
-        // Draw parent arrows first (underneath)
-        if self.show_parent_arrows {
-            if let Some(state) = &self.pathfinding_state {
-                for (child, parent) in state.came_from() {
-                    let from = rect.min
-                        + egui::Vec2::new(
-                            child.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                            child.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                        );
-                    let to = rect.min
-                        + egui::Vec2::new(
-                            parent.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                            parent.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                        );
-
-                    // Arrow line
-                    painter.line_segment([from, to], egui::Stroke::new(2.0, self.theme.border));
-
-                    // Arrow head
-                    let direction = (to - from).normalized();
-                    let arrow_size = 6.0;
-                    let arrow_tip = to - direction * arrow_size;
-                    let perpendicular =
-                        egui::Vec2::new(-direction.y, direction.x) * arrow_size * 0.5;
-
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![to, arrow_tip + perpendicular, arrow_tip - perpendicular],
-                        self.theme.border,
-                        egui::Stroke::NONE,
-                    ));
-                }
-            }
-        }
-
         // Draw grid cells
         for y in 0..self.grid.height() {
             for x in 0..self.grid.width() {
@@ -517,29 +483,14 @@ impl RoboNav {
 
                 let cell_color = cell_type.color();
 
-                painter.rect_filled(cell_rect, 4.0, cell_color);
+                painter.rect_filled(cell_rect, 0.0, cell_color);
                 painter.rect_stroke(
                     cell_rect,
-                    4.0,
-                    egui::Stroke::new(1.0, self.theme.border),
+                    0.0,
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(162, 175, 155)),
                     egui::StrokeKind::Middle,
                 );
 
-                // Draw robot
-                // if Some(pos) == self.robot_pos {
-                //     painter.circle_filled(
-                //         cell_rect.center(),
-                //         CELL_SIZE * 0.25,
-                //         egui::Color32::DARK_GREEN,
-                //     );
-                //     painter.circle_stroke(
-                //         cell_rect.center(),
-                //         CELL_SIZE * 0.25,
-                //         egui::Stroke::new(2.0, egui::Color32::WHITE),
-                //     );
-                // }
-
-                // Draw cost/heuristic numbers
                 if self.show_heuristics || self.show_costs {
                     if let Some(state) = &self.pathfinding_state {
                         let mut text_lines = Vec::new();
@@ -574,7 +525,42 @@ impl RoboNav {
             }
         }
 
-        // Handle clicks
+        if self.show_parent_arrows {
+            if let Some(state) = &self.pathfinding_state {
+                for (parent, child) in state.came_from() {
+                    let from = rect.min
+                        + egui::Vec2::new(
+                            child.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
+                            child.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
+                        );
+                    let to = rect.min
+                        + egui::Vec2::new(
+                            parent.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
+                            parent.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
+                        );
+
+                    // Arrow line
+                    painter.line_segment(
+                        [from, to],
+                        egui::Stroke::new(1.0, egui::Color32::from_rgb(218, 108, 108)),
+                    );
+
+                    // Arrow head
+                    let direction = (to - from).normalized();
+                    let arrow_size = 6.0;
+                    let arrow_tip = to - direction * arrow_size;
+                    let perpendicular =
+                        egui::Vec2::new(-direction.y, direction.x) * arrow_size * 0.5;
+
+                    painter.add(egui::Shape::convex_polygon(
+                        vec![to, arrow_tip + perpendicular, arrow_tip - perpendicular],
+                        egui::Color32::from_rgb(218, 108, 108),
+                        egui::Stroke::NONE,
+                    ));
+                }
+            }
+        }
+
         if response.clicked() {
             if let Some(pointer_pos) = response.interact_pointer_pos() {
                 let relative_pos = pointer_pos - rect.min;
