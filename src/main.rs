@@ -16,7 +16,7 @@ use position::Position;
 use theme::Theme;
 use tools::Tool;
 
-const CELL_SIZE: f32 = 50.0;
+const CELL_SIZE: f32 = 25.0;
 // const GITHUB_MARK: ImageSource = egui::include_image!("../assets/github-mark.svg");
 
 const DEFAULT_OBSTACLES: [[i32; 2]; 44] = [
@@ -108,8 +108,8 @@ impl Default for UIState {
 
 impl Default for RoboNav {
     fn default() -> Self {
-        let width = 20;
-        let height = 13;
+        let width = 40;
+        let height = 25;
         let mut grid = Grid::new(width, height);
 
         // Add some default obstacles
@@ -162,6 +162,20 @@ impl RoboNav {
         self.pathfinding_state = None;
         self.final_path.clear();
         // self.robot_pos = self.start_pos;
+    }
+
+    fn clear_all_obstacles(&mut self) {
+        for i in 0..self.grid.width() {
+            for j in 0..self.grid.height() {
+                let pos = Position {
+                    x: i as i32,
+                    y: j as i32,
+                };
+                if self.grid.get_cell(&pos) == CellType::Obstacle {
+                    self.grid.set_cell(pos, CellType::Empty);
+                }
+            }
+        }
     }
 
     fn frontier_len(&self) -> usize {
@@ -361,6 +375,12 @@ impl RoboNav {
                             egui::Button::new("🗑 Clear").min_size(egui::vec2(80.0, 30.0));
                         if ui.add(clear_button).clicked() {
                             self.clear_visualization();
+                        }
+                        let clear_all_obstacles_button =
+                            egui::Button::new("🗑 Remove All Obstacles")
+                                .min_size(egui::vec2(120.0, 30.0));
+                        if ui.add(clear_all_obstacles_button).clicked() {
+                            self.clear_all_obstacles();
                         }
                     });
 
