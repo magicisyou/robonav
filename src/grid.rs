@@ -1,8 +1,9 @@
 use crate::position::Position;
+use serde::{Deserialize, Serialize, Serializer};
 
 use egui::Color32;
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Deserialize, Copy)]
 pub enum CellType {
     Empty,
     Obstacle,
@@ -29,27 +30,37 @@ impl CellType {
     }
 }
 
+impl Serialize for CellType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = match self {
+            CellType::Path | CellType::Visited | CellType::Frontier | CellType::Current => {
+                "Solid".to_string()
+            }
+            remaining_variants => format!("{:?}", remaining_variants),
+        };
+        serializer.serialize_str(&s)
+    }
+}
+
+#[derive(Deserialize, Clone, Serialize)]
 pub struct Grid {
     cells: Vec<Vec<CellType>>,
-    width: usize,
-    height: usize,
+    pub size: f32,
+    pub width: usize,
+    pub height: usize,
 }
 
 impl Grid {
-    pub fn new(width: usize, height: usize) -> Self {
+    pub fn new(width: usize, height: usize, size: f32) -> Self {
         Self {
             cells: vec![vec![CellType::Empty; width]; height],
+            size,
             width,
             height,
         }
-    }
-
-    pub fn width(&self) -> usize {
-        self.width
-    }
-
-    pub fn height(&self) -> usize {
-        self.height
     }
 
     pub fn get_cell(&self, pos: &Position) -> CellType {
@@ -107,15 +118,12 @@ impl Grid {
         goal_pos: Option<Position>,
     ) {
         for &pos in positions {
-            if Some(pos) != start_pos && Some(pos) != goal_pos
-            // || start_pos == None && goal_pos == None
+            if Some(pos) != start_pos
+                && Some(pos) != goal_pos
+                && self.get_cell(&pos) == CellType::Empty
+                || self.get_cell(&pos) == CellType::Frontier
             {
-                if self.get_cell(&pos) == CellType::Empty
-                    || self.get_cell(&pos) == CellType::Frontier
-                // || self.get_cell(&pos) == CellType::Current
-                {
-                    self.set_cell(pos, CellType::Visited);
-                }
+                self.set_cell(pos, CellType::Visited);
             }
         }
     }
@@ -131,10 +139,11 @@ impl Grid {
         goal_pos: Option<Position>,
     ) {
         for &pos in positions {
-            if Some(pos) != start_pos && Some(pos) != goal_pos {
-                if self.get_cell(&pos) == CellType::Empty {
-                    self.set_cell(pos, CellType::Frontier);
-                }
+            if Some(pos) != start_pos
+                && Some(pos) != goal_pos
+                && self.get_cell(&pos) == CellType::Empty
+            {
+                self.set_cell(pos, CellType::Frontier);
             }
         }
     }

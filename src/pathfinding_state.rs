@@ -16,6 +16,7 @@ pub enum StepResult {
     NoPath,
 }
 
+#[derive(Default)]
 pub struct PathfindingState {
     // A* frontier
     open_set: BinaryHeap<Node>,
@@ -41,25 +42,25 @@ pub struct PathfindingState {
     previous_node: Option<Position>,
 }
 
-impl Default for PathfindingState {
-    fn default() -> Self {
-        Self {
-            open_set: BinaryHeap::new(),
-            bfs_queue: VecDeque::new(),
-            dfs_stack: Vec::new(),
-            closed_set: HashSet::new(),
-            came_from: HashMap::new(),
-            g_costs: HashMap::new(),
-            h_costs: HashMap::new(),
-            f_costs: HashMap::new(),
-            current_node: None,
-            step_count: 0,
-            last_step_info: String::new(),
-            last_neighbors: Vec::new(),
-            previous_node: None,
-        }
-    }
-}
+// impl Default for PathfindingState {
+//     fn default() -> Self {
+//         Self {
+//             open_set: BinaryHeap::new(),
+//             bfs_queue: VecDeque::new(),
+//             dfs_stack: Vec::new(),
+//             closed_set: HashSet::new(),
+//             came_from: HashMap::new(),
+//             g_costs: HashMap::new(),
+//             h_costs: HashMap::new(),
+//             f_costs: HashMap::new(),
+//             current_node: None,
+//             step_count: 0,
+//             last_step_info: String::new(),
+//             last_neighbors: Vec::new(),
+//             previous_node: None,
+//         }
+//     }
+// }
 
 impl PathfindingState {
     pub fn new() -> Self {

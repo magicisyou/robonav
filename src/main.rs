@@ -2,6 +2,7 @@ use eframe::egui;
 
 mod algorithms;
 mod grid;
+mod map_handler;
 mod node;
 mod pathfinding_state;
 mod position;
@@ -16,7 +17,7 @@ use position::Position;
 use theme::Theme;
 use tools::Tool;
 
-const CELL_SIZE: f32 = 25.0;
+// const CELL_SIZE: f32 = 25.0;
 // const GITHUB_MARK: ImageSource = egui::include_image!("../assets/github-mark.svg");
 
 const DEFAULT_OBSTACLES: [[i32; 2]; 44] = [
@@ -108,10 +109,10 @@ impl Default for UIState {
 
 impl Default for RoboNav {
     fn default() -> Self {
-        let width = 40;
-        let height = 25;
-        let mut grid = Grid::new(width, height);
-
+        let width = 100;
+        let height = 50;
+        let size = 25.0;
+        let mut grid = Grid::new(width, height, size);
         // Add some default obstacles
         for obstacle_pos in DEFAULT_OBSTACLES {
             grid.set_cell(
@@ -124,19 +125,17 @@ impl Default for RoboNav {
             grid,
             start_pos: Some(Position::new(1, 1)),
             goal_pos: Some(Position::new(17, 10)),
-            // robot_pos: Some(Position::new(2, 2)),
             current_algorithm: Algorithm::AStar,
             is_solving: false,
             solving_step: 0,
             pathfinding_state: None,
             final_path: Vec::new(),
 
-            show_heuristics: true,
-            show_costs: true,
-            show_parent_arrows: true,
-            // show_visit_order: false,
-            step_by_step: true,
-            auto_solve_speed: 0.5,
+            show_heuristics: false,
+            show_costs: false,
+            show_parent_arrows: false,
+            step_by_step: false,
+            auto_solve_speed: 0.0,
             last_step_time: 0.0,
             selected_tool: Tool::SetStart,
             algorithm_info: String::new(),
@@ -165,8 +164,8 @@ impl RoboNav {
     }
 
     fn clear_all_obstacles(&mut self) {
-        for i in 0..self.grid.width() {
-            for j in 0..self.grid.height() {
+        for i in 0..self.grid.width {
+            for j in 0..self.grid.height {
                 let pos = Position {
                     x: i as i32,
                     y: j as i32,
@@ -231,20 +230,20 @@ impl RoboNav {
 
         match self.selected_tool {
             Tool::SetStart => {
-                if let Some(old_start) = self.start_pos {
-                    if self.goal_pos != Some(old_start) {
-                        self.grid.set_cell(old_start, CellType::Empty);
-                    }
+                if let Some(old_start) = self.start_pos
+                    && self.goal_pos != Some(old_start)
+                {
+                    self.grid.set_cell(old_start, CellType::Empty);
                 }
                 self.start_pos = Some(pos);
                 // self.robot_pos = Some(pos);
                 self.grid.set_cell(pos, CellType::Start);
             }
             Tool::SetGoal => {
-                if let Some(old_goal) = self.goal_pos {
-                    if self.start_pos != Some(old_goal) {
-                        self.grid.set_cell(old_goal, CellType::Empty);
-                    }
+                if let Some(old_goal) = self.goal_pos
+                    && self.start_pos != Some(old_goal)
+                {
+                    self.grid.set_cell(old_goal, CellType::Empty);
                 }
                 self.goal_pos = Some(pos);
                 self.grid.set_cell(pos, CellType::Goal);
@@ -376,12 +375,6 @@ impl RoboNav {
                         if ui.add(clear_button).clicked() {
                             self.clear_visualization();
                         }
-                        let clear_all_obstacles_button =
-                            egui::Button::new("🗑 Remove All Obstacles")
-                                .min_size(egui::vec2(120.0, 30.0));
-                        if ui.add(clear_all_obstacles_button).clicked() {
-                            self.clear_all_obstacles();
-                        }
                     });
 
                     // ui.separator();
@@ -405,6 +398,31 @@ impl RoboNav {
                                 Tool::RemoveObstacle,
                                 "⬜ Remove Wall",
                             );
+
+                            let clear_all_obstacles_button =
+                                egui::Button::new("🗑 Remove All Obstacles")
+                                    .min_size(egui::vec2(120.0, 30.0));
+                            if ui.add(clear_all_obstacles_button).clicked() {
+                                self.clear_all_obstacles();
+                            }
+                        });
+                    });
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            let load_map_button =
+                                egui::Button::new("Load map").min_size(egui::vec2(50.0, 30.0));
+                            if ui.add(load_map_button).clicked()
+                                && let Ok(grid) = map_handler::load_map()
+                            {
+                                self.grid = grid;
+                            }
+                            let save_map_button =
+                                egui::Button::new("Save map").min_size(egui::vec2(50.0, 30.0));
+                            if ui.add(save_map_button).clicked() {
+                                let _ = map_handler::save_map(self.grid.clone());
+                            }
                         });
                     });
                 });
@@ -417,9 +435,9 @@ impl RoboNav {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
-                    self.render_grid(ui);
-                    ui.add_space(10.0);
                     self.render_legend(ui);
+                    ui.add_space(10.0);
+                    self.render_grid(ui);
                 });
             });
         });
@@ -433,6 +451,12 @@ impl RoboNav {
                 egui::CollapsingHeader::new("⚙ Display Settings")
                     .default_open(true)
                     .show(ui, |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut self.grid.size, 5.0..=50.0)
+                                .text("Cell size")
+                                .show_value(false),
+                        );
+                        ui.separator();
                         ui.checkbox(&mut self.show_heuristics, "Show Heuristics (h)");
                         ui.checkbox(&mut self.show_costs, "Show Costs (g/f)");
                         ui.checkbox(&mut self.show_parent_arrows, "Show Parent Arrows");
@@ -476,20 +500,21 @@ impl RoboNav {
 
     fn render_grid(&mut self, ui: &mut egui::Ui) {
         let grid_size = egui::Vec2::new(
-            self.grid.width() as f32 * CELL_SIZE,
-            self.grid.height() as f32 * CELL_SIZE,
+            self.grid.width as f32 * self.grid.size,
+            self.grid.height as f32 * self.grid.size,
         );
 
         let (response, painter) = ui.allocate_painter(grid_size, egui::Sense::click());
         let rect = response.rect;
 
         // Draw grid cells
-        for y in 0..self.grid.height() {
-            for x in 0..self.grid.width() {
+        let cell_size = self.grid.size;
+        for y in 0..self.grid.height {
+            for x in 0..self.grid.width {
                 let pos = Position::new(x as i32, y as i32);
                 let cell_rect = egui::Rect::from_min_size(
-                    rect.min + egui::Vec2::new(x as f32 * CELL_SIZE, y as f32 * CELL_SIZE),
-                    egui::Vec2::splat(CELL_SIZE),
+                    rect.min + egui::Vec2::new(x as f32 * cell_size, y as f32 * cell_size),
+                    egui::Vec2::splat(cell_size),
                 );
 
                 let mut cell_type = self.grid.get_cell(&pos);
@@ -511,90 +536,89 @@ impl RoboNav {
                     egui::StrokeKind::Middle,
                 );
 
-                if self.show_heuristics || self.show_costs {
-                    if let Some(state) = &self.pathfinding_state {
-                        let mut text_lines = Vec::new();
+                if (self.show_heuristics || self.show_costs)
+                    && let Some(state) = &self.pathfinding_state
+                {
+                    let mut text_lines = Vec::new();
 
-                        if self.show_costs {
-                            if let Some(g) = state.g_cost(&pos) {
-                                text_lines.push(format!("g:{}", g));
-                            }
-                            if let Some(f) = state.f_cost(&pos) {
-                                text_lines.push(format!("f:{}", f));
-                            }
+                    if self.show_costs {
+                        if let Some(g) = state.g_cost(&pos) {
+                            text_lines.push(format!("g:{}", g));
                         }
-                        if self.show_heuristics {
-                            if let Some(h) = state.h_cost(&pos) {
-                                text_lines.push(format!("h:{}", h));
-                            }
+                        if let Some(f) = state.f_cost(&pos) {
+                            text_lines.push(format!("f:{}", f));
                         }
+                    }
+                    if self.show_heuristics
+                        && let Some(h) = state.h_cost(&pos)
+                    {
+                        text_lines.push(format!("h:{}", h));
+                    }
 
-                        if !text_lines.is_empty() {
-                            for (i, line) in text_lines.iter().enumerate() {
-                                painter.text(
-                                    cell_rect.min + egui::Vec2::new(2.0, 2.0 + i as f32 * 10.0),
-                                    egui::Align2::LEFT_TOP,
-                                    line,
-                                    egui::FontId::proportional(8.0),
-                                    egui::Color32::BLACK,
-                                );
-                            }
+                    if !text_lines.is_empty() {
+                        for (i, line) in text_lines.iter().enumerate() {
+                            painter.text(
+                                cell_rect.min + egui::Vec2::new(2.0, 2.0 + i as f32 * 10.0),
+                                egui::Align2::LEFT_TOP,
+                                line,
+                                egui::FontId::proportional(8.0),
+                                egui::Color32::BLACK,
+                            );
                         }
                     }
                 }
             }
         }
 
-        if self.show_parent_arrows {
-            if let Some(state) = &self.pathfinding_state {
-                for (parent, child) in state.came_from() {
-                    let from = rect.min
-                        + egui::Vec2::new(
-                            child.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                            child.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                        );
-                    let to = rect.min
-                        + egui::Vec2::new(
-                            parent.x as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                            parent.y as f32 * CELL_SIZE + CELL_SIZE * 0.5,
-                        );
-
-                    // Arrow line
-                    painter.line_segment(
-                        [from, to],
-                        egui::Stroke::new(1.0, egui::Color32::from_rgb(218, 108, 108)),
+        if self.show_parent_arrows
+            && let Some(state) = &self.pathfinding_state
+        {
+            for (parent, child) in state.came_from() {
+                let from = rect.min
+                    + egui::Vec2::new(
+                        child.x as f32 * cell_size + cell_size * 0.5,
+                        child.y as f32 * cell_size + cell_size * 0.5,
+                    );
+                let to = rect.min
+                    + egui::Vec2::new(
+                        parent.x as f32 * cell_size + cell_size * 0.5,
+                        parent.y as f32 * cell_size + cell_size * 0.5,
                     );
 
-                    // Arrow head
-                    let direction = (to - from).normalized();
-                    let arrow_size = 6.0;
-                    let arrow_tip = to - direction * arrow_size;
-                    let perpendicular =
-                        egui::Vec2::new(-direction.y, direction.x) * arrow_size * 0.5;
+                // Arrow line
+                painter.line_segment(
+                    [from, to],
+                    egui::Stroke::new(1.0, egui::Color32::from_rgb(218, 108, 108)),
+                );
 
-                    painter.add(egui::Shape::convex_polygon(
-                        vec![to, arrow_tip + perpendicular, arrow_tip - perpendicular],
-                        egui::Color32::from_rgb(218, 108, 108),
-                        egui::Stroke::NONE,
-                    ));
-                }
+                // Arrow head
+                let direction = (to - from).normalized();
+                let arrow_size = 6.0;
+                let arrow_tip = to - direction * arrow_size;
+                let perpendicular = egui::Vec2::new(-direction.y, direction.x) * arrow_size * 0.5;
+
+                painter.add(egui::Shape::convex_polygon(
+                    vec![to, arrow_tip + perpendicular, arrow_tip - perpendicular],
+                    egui::Color32::from_rgb(218, 108, 108),
+                    egui::Stroke::NONE,
+                ));
             }
         }
 
-        if response.clicked() {
-            if let Some(pointer_pos) = response.interact_pointer_pos() {
-                let relative_pos = pointer_pos - rect.min;
-                let grid_x = (relative_pos.x / CELL_SIZE) as i32;
-                let grid_y = (relative_pos.y / CELL_SIZE) as i32;
-                self.handle_grid_click(Position::new(grid_x, grid_y));
-            }
+        if response.clicked()
+            && let Some(pointer_pos) = response.interact_pointer_pos()
+        {
+            let relative_pos = pointer_pos - rect.min;
+            let grid_x = (relative_pos.x / cell_size) as i32;
+            let grid_y = (relative_pos.y / cell_size) as i32;
+            self.handle_grid_click(Position::new(grid_x, grid_y));
         }
     }
 
     fn render_legend(&self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.label(egui::RichText::new("Legend").strong());
             ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("Legend").strong());
                 let legend_items = [
                     ("Empty", CellType::Empty.color()),
                     ("Obstacle", CellType::Obstacle.color()),
@@ -626,7 +650,7 @@ impl RoboNav {
 
     fn render_statistics(&self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("📊 Statistics")
-            .default_open(true)
+            .default_open(false)
             .show(ui, |ui| {
                 if let Some(state) = &self.pathfinding_state {
                     ui.horizontal(|ui| {
@@ -678,7 +702,7 @@ impl RoboNav {
 
     fn render_inspector(&self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new("🔍 Step Inspector")
-            .default_open(true)
+            .default_open(false)
             .show(ui, |ui| {
                 if let Some(state) = &self.pathfinding_state {
                     if !state.last_step_info().is_empty() {

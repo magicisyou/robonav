@@ -47,8 +47,10 @@ impl Default for Theme {
 
 impl Theme {
     pub fn style(&self) -> egui::Style {
-        let mut style = egui::Style::default();
-        style.visuals = egui::Visuals::light();
+        let mut style = egui::Style {
+            visuals: egui::Visuals::light(),
+            ..Default::default()
+        };
 
         style.visuals.panel_fill = self.background;
         style.visuals.window_fill = self.surface;
